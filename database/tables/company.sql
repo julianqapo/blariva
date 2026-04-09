@@ -1,0 +1,8 @@
+create table public.company (
+  id uuid not null default auth.uid (),
+  created_at timestamp with time zone not null default (now() AT TIME ZONE 'utc'::text),
+  name text not null default 'Company Name'::text,
+  email text not null default auth.email (),
+  expiry_date date not null,
+  constraint company_pkey primary key (id)
+) TABLESPACE pg_default;
