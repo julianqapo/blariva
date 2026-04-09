@@ -1,0 +1,16 @@
+##### complaince, the AI should cite the source where did it retrieve the answer.
+
+##### rate the answer, if the staff thinks it's uotdated, they will press thmups down to let the admin know about it and make the required changes to update it.
+
+#### The "I Don't Know" Guardrail: You must strictly prompt the LLM to refuse to answer if the context isn't in the retrieved chunks. It should say, "I couldn't find information about this in the [Department] container," rather than trying to guess.
+
+----------------------
+2. Admin & Analytics Dashboard
+
+#Search Gap Analysis: A view showing "Unanswered Questions." If 20 people ask about "Maternity Leave" and the AI returns no results, HR needs to see that immediately so they can write the document.
+
+#User Engagement Metrics: Track "Most Asked Questions" and "Most Helpful Answers" (based on thumbs up). This tells you what content is valuable and what needs improvement.
+
+#Departmental Usage Stats: See which departments are using the tool the most. If Sales is using it heavily but HR is not, you know where to focus your onboarding efforts.
+
+
