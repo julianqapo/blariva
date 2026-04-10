@@ -1,0 +1,91 @@
+
+***
+
+### **Figma UI/UX Design Prompt: Enterprise AI Knowledge Hub**
+
+**Project Overview**
+**Product:** A dual-purpose B2B SaaS platform for enterprise knowledge management and public AI agent deployment.
+**Goal:** Design a comprehensive, ultra-premium web application interface. The design must feel luxurious, minimalist, and highly polished (akin to Apple, Vercel, or Stripe).
+**Key Paradigm:** The app has two sides: an internal dashboard for staff to manage documents and chat with an internal AI, and an admin portal to expose specific documents to a public API-driven chat widget.
+
+---
+
+### **1. Global Design System (Tokens & Variables)**
+Please establish a robust design system before building the screens.
+
+* **Theme:** High-contrast Dark/Light mode. Deliver the core screens in Dark Mode (Obsidian/Midnight Slate backgrounds) to emphasize the premium, glassy aesthetic.
+* **Color Palette (Variables):**
+    * `Background-Primary`: #0A0A0A (Obsidian).
+    * `Background-Card`: #141414 (Slightly elevated dark gray).
+    * `Accent-Primary`: Platinum, Sapphire, or Champagne Gold (Use sparingly for primary buttons and soft glowing drop-shadows).
+    * `State-Warning`: Warm Amber (for duplicate content alerts).
+    * `Borders`: Impossibly thin, semi-transparent (`rgba(255, 255, 255, 0.1)`).
+* **Typography:** Inter, SF Pro, or Geist. Create a strict hierarchy:
+    * Display: Very bold, tight tracking (e.g., 4xl for page headers).
+    * Body: Medium-weight, high legibility.
+    * Code/Editor: A clean Monospace font (e.g., JetBrains Mono).
+* **Effects & Styling:**
+    * **Glassmorphism:** Extensive use of `backdrop-blur` for modals, sticky headers, and floating elements.
+    * **Shadows:** Soft, diffuse, colored glows behind active accent elements rather than harsh black drop-shadows.
+* **Universal UI Element:** Every screen MUST feature a fixed `?` (Question Mark) icon button in the top-right corner. Create a variant of a frosted-glass tooltip/popover that appears when this is clicked.
+
+---
+
+### **2. Core Components to Build**
+Create a component library for the following:
+* **Buttons:** Primary (Accent color), Secondary (Outlined/Ghost), Icon-only. Include Hover and Active variants.
+* **Inputs:** Text fields, Dropdowns, and Search bars. On focus, the border should gently glow with the accent color.
+* **Feedback Mechanism:** Minimalist "Thumbs Up" and "Thumbs Down" icon buttons (Default, Hover, Active/Filled states) to be placed next to AI chat responses.
+* **Pill Badges:** For Access Levels (Editor/Viewer) and AI Source Citations.
+* **Skeleton Loaders:** Beautiful, pulsing placeholder blocks (No spinning wheels).
+
+---
+
+### **3. Screens to Design**
+
+**Screen 1: Authentication (Sign In/Up)**
+* **Layout:** Centered, full viewport height.
+* **Visuals:** A single floating, frosted-glass card (`backdrop-blur`) resting over an abstract, slow-moving gradient or dark mesh background.
+* **Content:** Email, Password, "Remember Me" toggle, and full-width Accent login button.
+
+**Screen 2: Main Dashboard (Containers)**
+* **Layout:** Max-width container, top-aligned header, responsive grid (using Auto Layout).
+* **Cards:** Design two types of container cards:
+    1.  *Internal Departments* (IT, HR, Sales): Sleek, minimal cards with a folder icon, title, description, and document count.
+    2.  *Public Knowledge Base:* A distinctly luxurious, highlighted card (e.g., soft gold border, pulsing subtle glow) to differentiate it from internal data.
+
+**Screen 3: Internal Department View (Document Table)**
+* **Layout:** Header with a "Back" chevron, Page Title, and primary "Upload Document" button.
+* **Table:** A full-width data table inside a borderless card. Columns: Document Name (with file icon), Type, Size, Status (include an "Asynchronous Processing" pulsing progress bar variant), Modified Date, Access Level badge, and Actions (View/Edit). Avoid harsh vertical dividers.
+
+**Screen 4: Public Knowledge Base (Admin Portal & API Share)**
+* **Layout:** Similar to Screen 3, but the primary action is a **"Share Public Agent"** button.
+* **Modal Design (Crucial):** Design the `backdrop-blur` overlay modal triggered by the Share button. It must contain:
+    * Direct URL input with a 1-click copy icon.
+    * A cleanly framed, scannable QR Code.
+    * **API & Embed Section:** A dark-themed, syntax-highlighted code block containing the API endpoint and embed script tag.
+    * *Widget Customizer:* A sub-panel to set a custom HEX color, upload an AI avatar, and type a welcome greeting. Include a mini live-preview of the chat widget.
+
+**Screen 5: Internal Staff Chat Interface**
+* **Layout:** Fixed-height chat interface. Header, chat history area, and sticky bottom input.
+* **Features:**
+    * **Department Selectors:** A horizontal scrolling list of pill-shaped toggles to target specific containers before chatting.
+    * **Chat Bubbles:** User on the right (Accent color). AI on the left (Muted frosted glass).
+    * **Citations & Feedback:** Every AI response bubble MUST have a clickable "Source Document" pill badge at the bottom, flanked by the Thumbs Up/Down feedback icons.
+
+**Screen 6: Document Editor**
+* **Layout:** Minimalist, distraction-free writing sanctuary. Monospace text area.
+* **Alert Variant:** Design an "Analyze Redundancy" warning banner. It should be a warm amber, sliding in below the header, warning the user of duplicate content in other files.
+
+**Screen 7: Staff Access (RBAC)**
+* **Layout:** Data table showing Staff Avatars, Emails, and Role badges.
+* **Modal Design:** An "Add Staff" modal featuring custom-designed Read/Write toggle switches for each department.
+
+**Screen 8: Analytics & Audit Dashboard**
+* **Layout:** Top row of summary stat cards (Total Queries, Unanswered Queries). Main chart area below.
+* **Visuals:** Premium data visualizations (line/bar charts) using smooth gradients and glassy hover tooltips.
+* **Data Table:** A filterable Audit Log showing who accessed/edited documents. Include a specific section highlighting queries with high "Thumbs Down" rates.
+
+**Screen 9: Subscription & Billing**
+* **Layout:** A visually striking "Current Plan" banner utilizing a rich gradient mesh, followed by a 3-column pricing tier grid.
+* **Visuals:** Highlight the limits (storage, API calls) and make the "Ultimate" tier card pop with luxurious accents.
