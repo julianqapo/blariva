@@ -4,22 +4,8 @@
 // ============================================================
 
 import type { Metadata } from "next";
-import { Syne, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-
-// Display font — bold, geometric, unforgettable
-const syne = Syne({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-});
-
-// Mono for code/editor
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "500"],
-});
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
   title: "BlaRiva — Enterprise AI Knowledge Hub",
@@ -40,9 +26,19 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${syne.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className="h-full antialiased"
+      suppressHydrationWarning
     >
-      <body className="min-h-full bg-obsidian">{children}</body>
+      <body className="min-h-full bg-slate-50 dark:bg-slate-950">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
