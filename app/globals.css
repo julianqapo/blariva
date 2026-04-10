@@ -5,7 +5,7 @@
 
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .dark *):not(:where(.light-override, .light-override *)));
 
 /* ─── Design Tokens ─────────────────────────── */
 /* Light mode (default) */
@@ -45,6 +45,24 @@
   --color-gold-light: var(--primary-hover);
 }
 
+/* Light override — used by AppShell to force light inside html.dark */
+.light-override {
+  --bg:            #f8fafc;
+  --surface:       #ffffff;
+  --text:          #0f172a;
+  --muted:         #64748b;
+  --border:        #e2e8f0;
+  --primary:       #f59e0b;
+  --primary-hover: #d97706;
+  --primary-text:  #0f172a;
+
+  --bg-obsidian:   var(--bg);
+  --bg-card:       var(--surface);
+  --bg-card-dark:  var(--surface);
+  --color-gold:    var(--primary);
+  --color-gold-light: var(--primary-hover);
+}
+
 @theme inline {
   --color-obsidian:  var(--bg);
   --color-card-dark: var(--bg-card-dark);
@@ -54,16 +72,9 @@
 }
 
 /* ─── Base ──────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; }
-
-html { scroll-behavior: smooth; }
-
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ─── Mesh Background ───────────────────────── */
