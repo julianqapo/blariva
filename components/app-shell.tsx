@@ -7,13 +7,17 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Library, MessageSquare, Bot, LineChart,
   Shield, Settings, Search, Bell, ChevronRight,
-  MoreHorizontal, Sun, Moon
+  MoreHorizontal, Sun, Moon, HelpCircle, X, Info   // ← add these 3
 } from 'lucide-react';
+
+import { HelpModal } from './help/help-modal';
+import { HELP_CONTENT } from './help/help-content';
 
 // ── Scoped theme (no next-themes, no hydration issues) ──
 const STORAGE_KEY = 'blariva-theme';
 
 function useLocalTheme() {
+
   const [theme, setThemeState] = useState<'dark' | 'light'>('dark');
   const [mounted, setMounted] = useState(false);
 
@@ -56,6 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { theme, toggle, mounted } = useLocalTheme();
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   useEffect(() => {
     setTimeout(() => setIsLoaded(true), 100);
@@ -68,6 +73,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   if (!mounted) return null;
+
+    // ← ADD these 3 lines right here, after the mounted check
+  const AUTH_ROUTES = ['/login', '/signup', '/register'];
+  const isAuthRoute = AUTH_ROUTES.some((r) => pathname?.startsWith(r));
+  if (isAuthRoute) return <>{children}</>;
+
+  // ← ADD this line right after the auth check
+  const helpContent = HELP_CONTENT[pathname] ?? HELP_CONTENT[`/${pathname.split('/')[1]}`];
 
   return (
     <div className={`${theme === 'dark' ? 'dark' : 'light-override'} h-screen w-full overflow-hidden transition-colors duration-500`}>
@@ -149,6 +162,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
 
               <div className="h-6 w-px bg-slate-200 dark:bg-white/10" />
+              {helpContent && (
+              <button
+                onClick={() => setIsHelpOpen(true)}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
+                title="Page Guide"
+                aria-label="Open page guide"
+              >
+                <HelpCircle size={18} />
+              </button>
+            )}
 
               {/* Theme toggle */}
               <button
@@ -164,6 +187,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Bell size={18} />
                 <span className="absolute top-2 right-2 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white dark:ring-slate-950"></span>
               </button>
+
+              {/* Help Button */}
+              {helpContent && (
+              <button
+                onClick={() => setIsHelpOpen(true)}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
+                title="Page Guide"
+                aria-label="Open page guide"
+              >
+                <HelpCircle size={18} />
+              </button>
+            )}
             </div>
           </header>
 
@@ -173,6 +208,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
+      {/* ── HELP MODAL ── */}           {/* ← PASTE HERE */}
+      <HelpModal
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        content={helpContent}
+      />
     </div>
   );
 }
