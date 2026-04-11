@@ -6,6 +6,11 @@
 "use client";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+// At the top of the file, add the import:
+import { PublicNavbar } from '@/components/public-navbar';
+
+// Then replace <header>...</header> with:
+<PublicNavbar />
 
 export default function Home() {
   const [scrolled, setScrolled] = useState(false);
@@ -27,43 +32,7 @@ export default function Home() {
       </div>
 
       {/* Navbar */}
-      <header
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-          scrolled
-            ? "bg-white/[0.04] backdrop-blur-xl border-b border-white/[0.08]"
-            : "bg-transparent"
-        }`}
-      >
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="logo-mark">
-              <span className="logo-b">B</span>
-            </div>
-            <span className="font-display text-xl font-bold tracking-tight text-white">
-              BlaRiva
-            </span>
-          </div>
-          <nav className="hidden md:flex items-center gap-8">
-            {["Features", "Use Cases", "Pricing", "Docs"].map((item) => (
-              <a
-                key={item}
-                href={`#${item.toLowerCase().replace(" ", "-")}`}
-                className="text-sm text-white/50 hover:text-white transition-colors duration-200"
-              >
-                {item}
-              </a>
-            ))}
-          </nav>
-          <div className="flex items-center gap-3">
-            <Link href="/login" className="btn-ghost text-sm">
-              Sign In
-            </Link>
-            <Link href="/signup" className="btn-primary text-sm">
-              Get Started
-            </Link>
-          </div>
-        </div>
-      </header>
+      <PublicNavbar />
 
       {/* Hero */}
       <section className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 pt-24 pb-20 text-center">
