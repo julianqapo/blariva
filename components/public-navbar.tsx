@@ -55,7 +55,7 @@ export function PublicNavbar() {
         {/* Desktop nav links */}
         <nav className="hidden md:flex items-center gap-1">
           {NAV_LINKS.map(({ label, href }) => (
-            <a
+            <Link
               key={label}
               href={href}
               className={`px-3.5 py-2 rounded-lg text-sm transition-all duration-200 ${
@@ -65,14 +65,14 @@ export function PublicNavbar() {
               }`}
             >
               {label}
-            </a>
+            </Link>
           ))}
         </nav>
 
         {/* CTA buttons */}
         <div className="hidden md:flex items-center gap-2 shrink-0">
-          <Link href="/login"  className="btn-ghost text-sm">Sign In</Link>
-          <Link href="/signup" className="btn-primary text-sm">Get Started</Link>
+          <Link href="/staff"  className="btn-ghost text-sm">Staff Access</Link>
+          <Link href="/admin" className="btn-primary text-sm">Get Started</Link>
         </div>
 
         {/* Mobile hamburger */}
@@ -89,13 +89,13 @@ export function PublicNavbar() {
       {menuOpen && (
         <div className="md:hidden border-t border-white/[0.06] bg-[#0A0A0A]/95 backdrop-blur-xl px-4 py-3 flex flex-col gap-1">
           {NAV_LINKS.map(({ label, href }) => (
-            <a
+            <Link
               key={label}
               href={href}
               className="px-4 py-2.5 rounded-xl text-sm text-white/60 hover:text-white hover:bg-white/[0.06] transition-all"
             >
               {label}
-            </a>
+            </Link>
           ))}
           <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-white/[0.06]">
             <Link href="/login"  className="btn-ghost text-sm text-center">Sign In</Link>
