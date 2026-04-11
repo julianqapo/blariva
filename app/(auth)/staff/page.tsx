@@ -1,24 +1,38 @@
 // ============================================================
-// FILE LOCATION: app/login/page.tsx
-// (Create a folder called "login" inside app/, then put this file inside it)
+// FILE LOCATION: (auth)/staff/page.tsx
 // ============================================================
 
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+// Adjust this import path to point to your actual server action file
+import { signupWithMagicLink } from "../admin/db_service";
 
-export default function LoginPage() {
+export default function StaffAuthPage() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  const router = useRouter();
+  
+  // Catch errors coming back from the /auth/callback route
+  const searchParams = useSearchParams();
+  const urlErrorMsg = searchParams.get('error');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // TODO: wire up Supabase auth
-    await new Promise((r) => setTimeout(r, 1000));
-    setLoading(false);
+    
+    // Pass only the email and the 'staff' role
+    const response = await signupWithMagicLink(email, 'staff');
+
+    if (response.success) {
+      router.push('/verify');
+    } else {
+      // Catch errors that happen immediately when clicking "Send"
+      alert(`Error: ${response.message}`);
+      setLoading(false);
+    }
   };
 
   return (
@@ -41,8 +55,15 @@ export default function LoginPage() {
 
         <h1 className="font-display text-2xl font-black mb-1">Welcome back</h1>
         <p className="text-sm text-white/40 mb-8">
-          Sign in to your workspace
+          Sign in to your staff workspace
         </p>
+
+        {/* Render the URL error beautifully if the callback rejected them */}
+        {urlErrorMsg && (
+          <div className="bg-red-500/10 border border-red-500/50 text-red-500 p-3 rounded-md mb-6 text-sm">
+            {urlErrorMsg}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
@@ -58,55 +79,6 @@ export default function LoginPage() {
             />
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="auth-label" style={{ marginBottom: 0 }}>
-                Password
-              </label>
-              <a
-                href="#"
-                className="text-xs text-gold/70 hover:text-gold transition-colors"
-              >
-                Forgot password?
-              </a>
-            </div>
-            <input
-              type="password"
-              className="auth-input"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-          </div>
-
-          {/* Remember me */}
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={remember}
-              onClick={() => setRemember(!remember)}
-              className={`relative w-9 h-5 rounded-full border transition-all duration-200 flex items-center ${
-                remember
-                  ? "bg-gold border-gold"
-                  : "bg-transparent border-white/20"
-              }`}
-            >
-              <span
-                className={`absolute left-0.5 w-4 h-4 rounded-full transition-transform duration-200 ${
-                  remember
-                    ? "translate-x-4 bg-obsidian"
-                    : "translate-x-0 bg-white/30"
-                }`}
-              />
-            </button>
-            <span className="text-sm text-white/40 group-hover:text-white/60 transition-colors">
-              Remember me for 30 days
-            </span>
-          </label>
-
           <button
             type="submit"
             disabled={loading}
@@ -114,29 +86,29 @@ export default function LoginPage() {
             style={{ padding: "0.875rem", fontSize: "1rem" }}
           >
             {loading ? (
-              <span className="flex items-center gap-2">
+              <span className="flex items-center justify-center gap-2">
                 <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Signing in…
+                Sending secure link…
               </span>
             ) : (
-              "Sign In"
+              "Continue with Email"
             )}
           </button>
         </form>
 
-        <p className="text-center text-sm text-white/30 mt-8">
-          Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-gold/80 hover:text-gold transition-colors font-medium">
-            Create one free
-          </Link>
+        {/* Help hint */}
+        <p className="text-center text-xs text-white/20 mt-6">
+          Added by your admin? Just sign in — your access is already configured.
         </p>
 
-        {/* Help hint */}
-        <p className="text-center text-xs text-white/20 mt-4">
-          Added by your admin? Just sign in — your access is already configured.
+        <p className="text-center text-sm text-white/30 mt-6">
+          Are you an organization admin?{" "}
+          <Link href="/admin" className="text-gold/80 hover:text-gold transition-colors font-medium">
+            Sign in here
+          </Link>
         </p>
       </div>
     </div>

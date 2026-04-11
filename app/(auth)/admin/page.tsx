@@ -1,25 +1,38 @@
 // ============================================================
-// FILE LOCATION: app/signup/page.tsx
-// (Create a folder called "signup" inside app/, then put this file inside it)
+// FILE LOCATION: (auth)/admin/page.tsx
 // ============================================================
 
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+// Adjust this import path to point to your actual server action file
+import { signupWithMagicLink } from "./db_service";
 
-export default function SignupPage() {
-  const [name, setName] = useState("");
-  const [org, setOrg] = useState("");
+export default function AdminAuthPage() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  const router = useRouter();
+  
+  // Catch errors coming back from the /auth/callback route
+  const searchParams = useSearchParams();
+  const urlErrorMsg = searchParams.get('error');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // TODO: wire up Supabase auth
-    await new Promise((r) => setTimeout(r, 1000));
-    setLoading(false);
+    
+    // Pass only the email and the role
+    const response = await signupWithMagicLink(email, 'admin');
+
+    if (response.success) {
+      router.push('/verify');
+    } else {
+      // Catch errors that happen immediately when clicking "Send"
+      alert(`Error: ${response.message}`);
+      setLoading(false);
+    }
   };
 
   return (
@@ -40,39 +53,20 @@ export default function SignupPage() {
         </div>
 
         <h1 className="font-display text-2xl font-black mb-1">
-          Start for free
+          Welcome to BlaRiva
         </h1>
         <p className="text-sm text-white/40 mb-8">
-          Set up your workspace in under 2 minutes
+          Enter your work email to sign in or create an account
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="auth-label">Full Name</label>
-              <input
-                type="text"
-                className="auth-input"
-                placeholder="Jane Smith"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                autoComplete="name"
-              />
-            </div>
-            <div>
-              <label className="auth-label">Organization</label>
-              <input
-                type="text"
-                className="auth-input"
-                placeholder="Acme Corp"
-                value={org}
-                onChange={(e) => setOrg(e.target.value)}
-                required
-              />
-            </div>
+        {/* Render the URL error beautifully if the callback rejected them */}
+        {urlErrorMsg && (
+          <div className="bg-red-500/10 border border-red-500/50 text-red-500 p-3 rounded-md mb-6 text-sm">
+            {urlErrorMsg}
           </div>
+        )}
 
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="auth-label">Work Email</label>
             <input
@@ -84,41 +78,6 @@ export default function SignupPage() {
               required
               autoComplete="email"
             />
-          </div>
-
-          <div>
-            <label className="auth-label">Password</label>
-            <input
-              type="password"
-              className="auth-input"
-              placeholder="Min. 8 characters"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              autoComplete="new-password"
-            />
-            {/* Strength meter */}
-            {password.length > 0 && (
-              <div className="mt-2 flex gap-1">
-                {[0, 1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="h-0.5 flex-1 rounded-full transition-all duration-300"
-                    style={{
-                      background:
-                        password.length > i * 3
-                          ? password.length < 6
-                            ? "#ef4444"
-                            : password.length < 10
-                            ? "#f59e0b"
-                            : "#10b981"
-                          : "rgba(255,255,255,0.1)",
-                    }}
-                  />
-                ))}
-              </div>
-            )}
           </div>
 
           <button
@@ -133,27 +92,27 @@ export default function SignupPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Creating workspace…
+                Sending secure link…
               </span>
             ) : (
-              "Create Free Account"
+              "Continue with Email"
             )}
           </button>
         </form>
 
         <p className="text-center text-xs text-white/20 mt-6 leading-relaxed">
-          By signing up, you agree to our{" "}
+          By continuing, you agree to our{" "}
           <a href="#" className="text-gold/50 hover:text-gold/80">Terms</a> and{" "}
           <a href="#" className="text-gold/50 hover:text-gold/80">Privacy Policy</a>.
         </p>
 
         <p className="text-center text-sm text-white/30 mt-5">
-          Already have an account?{" "}
+          Are you a staff member?{" "}
           <Link
-            href="/login"
+            href="/staff"
             className="text-gold/80 hover:text-gold transition-colors font-medium"
           >
-            Sign in
+            Sign in here
           </Link>
         </p>
       </div>

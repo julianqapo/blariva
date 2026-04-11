@@ -10,6 +10,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_email text; -- FIX 1: Added semicolon
+  v_uid uuid;
   v_company_id uuid;
   v_staff_id uuid;
   v_new_id uuid;
@@ -20,6 +21,7 @@ BEGIN
   -- FIX 2: Used := for assignment and added semicolon
   -- Note: auth.email() is a built-in Supabase wrapper for auth.jwt()->>'email'
   v_email := auth.email(); 
+  v_uid := auth.uid();
 
   IF v_email IS NULL THEN
     RETURN jsonb_build_object(
@@ -34,7 +36,7 @@ BEGIN
   -- ==========================================
   SELECT id INTO v_company_id 
   FROM public.company 
-  WHERE email = v_email
+  WHERE email = v_email AND id = v_uid
   LIMIT 1;
 
   IF v_company_id IS NOT NULL THEN
@@ -53,7 +55,7 @@ BEGIN
   -- ==========================================
   SELECT id INTO v_staff_id 
   FROM public.staff 
-  WHERE email = v_email AND is_active = true 
+  WHERE email = v_email AND is_active = true AND id = v_uid
   LIMIT 1;
 
   IF v_staff_id IS NOT NULL THEN
@@ -84,7 +86,10 @@ BEGIN
   ) VALUES (
     format('Organization created via Initial Sign-Up. Email: "%s", Expiry Date: %s.', 
            v_email, 
-           (CURRENT_DATE + INTERVAL '30 days')::date));
+           (CURRENT_DATE + INTERVAL '30 days')::date),
+           v_new_id,
+           v_email
+           );
 
   -- ==========================================
   -- Step 5: Return Success Payload
