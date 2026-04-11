@@ -4,5 +4,6 @@ create table public.company (
   name text not null default 'Company Name'::text,
   email text not null default auth.email (),
   expiry_date date not null,
-  constraint company_pkey primary key (id)
+  constraint company_pkey primary key (id),
+  constraint company_email_key unique (email)
 ) TABLESPACE pg_default;

@@ -1,9 +1,9 @@
 -- 1. CLEANUP
-DROP TRIGGER IF EXISTS tr_sync_company_to_staff ON public.company;
-DROP FUNCTION IF EXISTS public.on_handle_company_staff_sync();
+DROP TRIGGER IF EXISTS tr_sync_company_owner ON public.company;
+DROP FUNCTION IF EXISTS public.on_create_company_sync_owner();
 
 -- 2. CREATE TRIGGER FUNCTION
-CREATE OR REPLACE FUNCTION public.on_handle_company_staff_sync()
+CREATE OR REPLACE FUNCTION public.on_create_company_sync_owner()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -11,30 +11,37 @@ SET search_path = public
 AS $$
 BEGIN
   -- ==========================================
-  -- ON INSERT: Create initial staff record
+  -- ON INSERT: Create the initial staff record
   -- ==========================================
   IF (TG_OP = 'INSERT') THEN
     INSERT INTO public.staff (
+      id,
+      created_at,
+      email,
       id_company,
       name
     )
     VALUES (
-      NEW.id,
+      NEW.id,           -- Staff ID matches the Company ID exactly
+      NEW.created_at,
+      NEW.email,
+      NEW.id,           -- Foreign Key links to the Company ID
       NEW.name
     );
     
     RETURN NEW;
 
   -- ==========================================
-  -- ON UPDATE: Keep staff info in sync
+  -- ON UPDATE: Keep staff info and IDs in sync
   -- ==========================================
   ELSIF (TG_OP = 'UPDATE') THEN
-    -- Update staff records linked to this company if name or email changed
     UPDATE public.staff
     SET 
+      id = NEW.id,          -- Updates the Primary Key if company ID changes
+      id_company = NEW.id,  -- Updates the Foreign Key if company ID changes
       name = NEW.name,
       email = NEW.email
-    WHERE id_company = OLD.id;
+    WHERE id = OLD.id;
     
     RETURN NEW;
 
@@ -53,9 +60,8 @@ END;
 $$;
 
 -- 3. BIND TRIGGER TO TABLE
--- Using AFTER because we need the Company ID (UUID) to exist 
--- to satisfy the Foreign Key constraint in the Staff table.
-CREATE TRIGGER tr_sync_company_to_staff
+-- Must use AFTER so the Company ID exists to satisfy the Staff table's Foreign Key constraint.
+CREATE TRIGGER tr_sync_company_owner
 AFTER INSERT OR UPDATE OR DELETE ON public.company
 FOR EACH ROW
-EXECUTE FUNCTION public.on_handle_company_staff_sync();
+EXECUTE FUNCTION public.on_create_company_sync_owner();

@@ -4,6 +4,7 @@ create table public.staff (
   email text not null default auth.email (),
   id_company uuid not null,
   name text not null,
+  is_active boolean not null default true,
   constraint staff_pkey primary key (id),
   constraint staff_id_company_fkey foreign KEY (id_company) references company (id) on update CASCADE on delete CASCADE
 ) TABLESPACE pg_default;
