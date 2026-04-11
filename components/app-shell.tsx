@@ -1,4 +1,3 @@
-// components/app-shell.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -7,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Library, MessageSquare, Bot, LineChart,
   Shield, Settings, Search, Bell, ChevronRight,
-  MoreHorizontal, Sun, Moon, HelpCircle, X, Info   // ← add these 3
+  MoreHorizontal, Sun, Moon, HelpCircle,
 } from 'lucide-react';
 
 import { HelpModal } from './help/help-modal';
@@ -17,7 +16,6 @@ import { HELP_CONTENT } from './help/help-content';
 const STORAGE_KEY = 'blariva-theme';
 
 function useLocalTheme() {
-
   const [theme, setThemeState] = useState<'dark' | 'light'>('dark');
   const [mounted, setMounted] = useState(false);
 
@@ -37,14 +35,30 @@ function useLocalTheme() {
   return { theme, toggle, mounted };
 }
 
-const NavItem = ({ icon, label, href, isActive }: { icon: React.ReactElement; label: string; href: string; isActive: boolean }) => (
+const NavItem = ({
+  icon,
+  label,
+  href,
+  isActive,
+}: {
+  icon: React.ReactElement;
+  label: string;
+  href: string;
+  isActive: boolean;
+}) => (
   <Link
     href={href}
-    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 ${
-      isActive
-        ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 font-semibold'
-        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.03] hover:text-slate-900 dark:hover:text-slate-200 font-medium'
-    }`}
+    className={`
+      w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
+      transition-all duration-200 ease-out
+      hover:translate-x-1 hover:scale-[1.02]
+      active:scale-[0.98] active:translate-x-0
+      ${
+        isActive
+          ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 font-semibold translate-x-1 scale-[1.02]'
+          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.03] hover:text-slate-900 dark:hover:text-slate-200 font-medium'
+      }
+    `}
   >
     <div className={`${isActive ? 'opacity-100' : 'opacity-70'}`}>
       {React.cloneElement(icon, { size: 18 } as any)}
@@ -74,13 +88,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!mounted) return null;
 
-    // ← ADD these 3 lines right here, after the mounted check
   const AUTH_ROUTES = ['/login', '/signup', '/register'];
   const isAuthRoute = AUTH_ROUTES.some((r) => pathname?.startsWith(r));
   if (isAuthRoute) return <>{children}</>;
 
-  // ← ADD this line right after the auth check
-  const helpContent = HELP_CONTENT[pathname] ?? HELP_CONTENT[`/${pathname.split('/')[1]}`];
+  const helpContent =
+    HELP_CONTENT[pathname] ?? HELP_CONTENT[`/${pathname.split('/')[1]}`];
 
   return (
     <div className={`${theme === 'dark' ? 'dark' : 'light-override'} h-screen w-full overflow-hidden transition-colors duration-500`}>
@@ -104,29 +117,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Nav links */}
           <div className="flex-1 py-6 px-4 flex flex-col gap-1">
-            <div className="px-3 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Platform</div>
-            <NavItem icon={<LayoutDashboard />} label="Overview" href="/dashboard" isActive={pathname === '/dashboard'} />
-            <NavItem icon={<Library />} label="Knowledge Library" href="/library" isActive={pathname === '/library'} />
-            <NavItem icon={<MessageSquare />} label="AI Workspace" href="/chat" isActive={pathname === '/chat'} />
-            <NavItem icon={<Bot />} label="Agent Builder" href="/builder" isActive={pathname === '/builder'} />
-            <NavItem icon={<LineChart />} label="Analytics" href="/analytics" isActive={pathname === '/analytics'} />
+            <div className="px-3 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+              Platform
+            </div>
+            <NavItem icon={<LayoutDashboard />} label="Overview"          href="/dashboard" isActive={pathname === '/dashboard'} />
+            <NavItem icon={<Library />}         label="Knowledge Library" href="/library"   isActive={pathname === '/library'} />
+            <NavItem icon={<MessageSquare />}   label="AI Workspace"      href="/chat"      isActive={pathname === '/chat'} />
+            <NavItem icon={<Bot />}             label="Agent Builder"     href="/builder"   isActive={pathname === '/builder'} />
+            <NavItem icon={<LineChart />}       label="Analytics"         href="/analytics" isActive={pathname === '/analytics'} />
 
-            <div className="px-3 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mt-8 mb-2">Governance</div>
-            <NavItem icon={<Shield />} label="Admin & Roles" href="/admin" isActive={pathname === '/admin'} />
-            <NavItem icon={<Settings />} label="Settings" href="/settings" isActive={pathname === '/settings'} />
+            <div className="px-3 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mt-8 mb-2">
+              Governance
+            </div>
+            <NavItem icon={<Shield />}   label="Admin & Roles" href="/admin"    isActive={pathname === '/admin'} />
+            <NavItem icon={<Settings />} label="Settings"      href="/settings" isActive={pathname === '/settings'} />
           </div>
 
           {/* User card */}
           <div className="p-4 border-t border-slate-200 dark:border-white/[0.04]">
-            <div className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/[0.03] transition-colors cursor-pointer group">
-              <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-white/10 group-hover:border-slate-300 dark:group-hover:border-white/20 transition-colors">
+            <div className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/[0.03] hover:translate-x-1 transition-all duration-200 ease-out cursor-pointer group">
+              <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-white/10 group-hover:border-amber-300 dark:group-hover:border-amber-500/40 transition-colors shrink-0">
                 <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">JD</span>
               </div>
               <div className="flex-1 overflow-hidden">
                 <div className="text-sm font-semibold text-slate-900 dark:text-slate-200 truncate">Jane Doe</div>
                 <div className="text-xs text-slate-500 truncate">Enterprise Admin</div>
               </div>
-              <MoreHorizontal size={16} className="text-slate-400" />
+              <MoreHorizontal size={16} className="text-slate-400 group-hover:text-amber-500 transition-colors shrink-0" />
             </div>
           </div>
         </nav>
@@ -149,7 +166,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
               {/* Search bar */}
               <div className="relative group hidden sm:block">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 group-hover:text-amber-500 transition-colors" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 group-focus-within:text-amber-500 transition-colors" />
                 <input
                   type="text"
                   placeholder="Search knowledge base..."
@@ -162,16 +179,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
 
               <div className="h-6 w-px bg-slate-200 dark:bg-white/10" />
+
+              {/* Help button — only shown when page has a guide */}
               {helpContent && (
-              <button
-                onClick={() => setIsHelpOpen(true)}
-                className="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
-                title="Page Guide"
-                aria-label="Open page guide"
-              >
-                <HelpCircle size={18} />
-              </button>
-            )}
+                <button
+                  onClick={() => setIsHelpOpen(true)}
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
+                  title="Page Guide"
+                  aria-label="Open page guide"
+                >
+                  <HelpCircle size={18} />
+                </button>
+              )}
 
               {/* Theme toggle */}
               <button
@@ -185,20 +204,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {/* Notifications */}
               <button className="relative w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
                 <Bell size={18} />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white dark:ring-slate-950"></span>
+                <span className="absolute top-2 right-2 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white dark:ring-slate-950" />
               </button>
-
-              {/* Help Button */}
-              {helpContent && (
-              <button
-                onClick={() => setIsHelpOpen(true)}
-                className="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
-                title="Page Guide"
-                aria-label="Open page guide"
-              >
-                <HelpCircle size={18} />
-              </button>
-            )}
             </div>
           </header>
 
@@ -208,7 +215,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
-      {/* ── HELP MODAL ── */}           {/* ← PASTE HERE */}
+
+      {/* ── HELP MODAL ── */}
       <HelpModal
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
