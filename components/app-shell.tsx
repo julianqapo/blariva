@@ -179,21 +179,33 @@ export function AppShell({
 
   const handleNavClick = useCallback(() => setMobileOpen(false), []);
 
-  const getPageName = () => {
-    if (pathname === '/') return 'Overview';
-    const segment = pathname.split('/').filter(Boolean).pop() ?? 'overview';
-    return segment.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  };
+ const PAGE_NAMES: Record<string, string> = {
+  '/dashboard': 'Overview',
+  '/library':   'Knowledge Library',
+  '/chat':      'AI Workspace',
+  '/builder':   'Agent Builder',
+  '/analytics': 'Analytics',
+  '/admin':     'Admin & Roles',
+  '/settings':  'Settings',
+};
+
+const getPageName = () => {
+  // Exact match first
+  if (PAGE_NAMES[pathname]) return PAGE_NAMES[pathname];
+  // Partial match for nested routes (e.g. /library/123)
+  const segment = '/' + (pathname.split('/').filter(Boolean)[0] ?? '');
+  return PAGE_NAMES[segment] ?? pathname.split('/').filter(Boolean).pop()?.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) ?? 'Overview';
+};
 
   const handleSignOut = async () => {
     setMobileOpen(false);
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push('/member');
   };
 
   if (!mounted) return null;
 
-  const AUTH_ROUTES = ['/login', '/signup', '/register', '/admin', '/staff', '/verify'];
+  const AUTH_ROUTES = ['/admin', '/member', '/verify'];
   const isAuthRoute = AUTH_ROUTES.some((r) => pathname?.startsWith(r));
   if (isAuthRoute) return <>{children}</>;
 
@@ -276,11 +288,11 @@ export function AppShell({
         )}
         {!expanded && <div className="mb-2 h-4" />}
 
-        <NavItem icon={<LayoutDashboard />} label="Overview"          href="/dashboard" isActive={pathname === '/dashboard'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<Library />}         label="Knowledge Library" href="/library"   isActive={pathname === '/library'}   expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<MessageSquare />}   label="AI Workspace"      href="/chat"      isActive={pathname === '/chat'}      expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<Bot />}             label="Agent Builder"     href="/builder"   isActive={pathname === '/builder'}   expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<LineChart />}       label="Analytics"         href="/analytics" isActive={pathname === '/analytics'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<LayoutDashboard />} label={PAGE_NAMES["/dashboard"]}         href="/dashboard" isActive={pathname === '/dashboard'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<Library />}         label={PAGE_NAMES["/library"]} href="/library"   isActive={pathname === '/library'}   expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<MessageSquare />}   label={PAGE_NAMES["/chat"]}      href="/chat"      isActive={pathname === '/chat'}      expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<Bot />}             label={PAGE_NAMES["/builder"]}     href="/builder"   isActive={pathname === '/builder'}   expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<LineChart />}       label={PAGE_NAMES["/analytics"]}         href="/analytics" isActive={pathname === '/analytics'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
 
         <div className="h-px bg-slate-200 dark:bg-white/[0.04] my-4 mx-3" />
 
@@ -289,8 +301,8 @@ export function AppShell({
             Governance
           </div>
         )}
-        <NavItem icon={<Shield />}   label="Admin & Roles" href="/admin"    isActive={pathname === '/admin'}    expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<Settings />} label="Settings"      href="/settings" isActive={pathname === '/settings'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<Shield />}   label={PAGE_NAMES["/admin"]}    href="/admin"    isActive={pathname === '/admin'}    expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<Settings />} label={PAGE_NAMES["/settings"]}      href="/settings" isActive={pathname === '/settings'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
       </div>
 
       {/* Sign out — same fixed icon column pattern */}
