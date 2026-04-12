@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Shield } from "lucide-react";
-import { sendOtp } from "./db_service";
+import { sendOtp } from "../auth_actions";
 
 export default function AdminAuthPage() {
   const [email, setEmail] = useState("");
@@ -20,7 +20,7 @@ export default function AdminAuthPage() {
     setError("");
     setLoading(true);
 
-    const response = await sendOtp(email);
+    const response = await sendOtp(email, "admin");
 
     if (response.success) {
       router.push(`/verify?email=${encodeURIComponent(email)}&role=admin`);

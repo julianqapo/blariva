@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, UserCircle } from "lucide-react";
-import { sendOtp } from "../admin/db_service";
+import { sendOtp } from "../auth_actions";
 
 export default function StaffAuthPage() {
   const [email, setEmail] = useState("");
@@ -20,7 +20,7 @@ export default function StaffAuthPage() {
     setError("");
     setLoading(true);
 
-    const response = await sendOtp(email);
+    const response = await sendOtp(email, "member");
 
     if (response.success) {
       router.push(`/verify?email=${encodeURIComponent(email)}&role=member`);
