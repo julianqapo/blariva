@@ -189,12 +189,14 @@ export function AppShell({
   '/settings':  'Settings',
 };
 
-const getPageName = () => {
-  // Exact match first
-  if (PAGE_NAMES[pathname]) return PAGE_NAMES[pathname];
-  // Partial match for nested routes (e.g. /library/123)
-  const segment = '/' + (pathname.split('/').filter(Boolean)[0] ?? '');
-  return PAGE_NAMES[segment] ?? pathname.split('/').filter(Boolean).pop()?.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) ?? 'Overview';
+// Replace getPageName with getBreadcrumbs
+const getBreadcrumbs = () => {
+  const segments = pathname.split('/').filter(Boolean);
+  return segments.map((segment, i) => {
+    const href = '/' + segments.slice(0, i + 1).join('/');
+    const label = PAGE_NAMES[href] ?? segment.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    return { href, label };
+  });
 };
 
   const handleSignOut = async () => {
@@ -425,10 +427,30 @@ const getPageName = () => {
                 <span className="text-slate-900 dark:text-slate-100 font-semibold text-base tracking-tight">BlaRiva</span>
               </div>
 
-              <div className="hidden lg:flex items-center gap-4 text-sm font-medium text-slate-500 dark:text-slate-400">
-                <span>BlaRiva OS</span>
-                <ChevronRight size={14} className="text-slate-300 dark:text-slate-600" />
-                <span className="text-slate-900 dark:text-slate-100">{getPageName()}</span>
+              <div className="hidden lg:flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+                <Link
+                  href="/dashboard"
+                  className="hover:text-amber-500 transition-colors"
+                >
+                  BlaRiva OS
+                </Link>
+                {getBreadcrumbs().map(({ href, label }, i, arr) => (
+                  <React.Fragment key={href}>
+                    <ChevronRight size={14} className="text-slate-300 dark:text-slate-600 shrink-0" />
+                    {i === arr.length - 1 ? (
+                      // Last segment — current page, not clickable
+                      <span className="text-slate-900 dark:text-slate-100 capitalize">{label}</span>
+                    ) : (
+                      // Middle segments — clickable
+                      <Link
+                        href={href}
+                        className="hover:text-amber-500 transition-colors capitalize"
+                      >
+                        {label}
+                      </Link>
+                    )}
+                  </React.Fragment>
+                ))}
               </div>
             </div>
 
