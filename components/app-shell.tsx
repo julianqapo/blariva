@@ -1,8 +1,12 @@
+// ============================================================
+// FILE LOCATION: components/AppShell.tsx
+// ============================================================
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { createBrowserSupabaseClient } from '@/app/utils/supabase_browser';
 import {
   LayoutDashboard, Library, MessageSquare, Bot, LineChart,
   Shield, Settings, Search, Bell, ChevronRight,
@@ -11,6 +15,13 @@ import {
 
 import { HelpModal } from './help/help-modal';
 import { HELP_CONTENT } from './help/help-content';
+
+export interface UserProfile {
+  name: string;
+  email: string;
+  role: string;
+  initials: string;
+}
 
 const STORAGE_KEY = 'blariva-theme';
 
@@ -33,6 +44,7 @@ function useLocalTheme() {
   return { theme, toggle, mounted };
 }
 
+// ── Nav Item with fixed-width icon column ──
 const NavItem = ({
   icon,
   label,
@@ -53,13 +65,13 @@ const NavItem = ({
     onClick={onClick}
     title={!expanded ? label : undefined}
     className={`
-      relative flex items-center gap-3 rounded-xl
+      relative flex items-center rounded-xl
       transition-all duration-200 ease-out
       group
       ${expanded
-        ? `px-3 py-2.5 hover:translate-x-1 hover:scale-[1.02] active:scale-[0.98] active:translate-x-0
+        ? `hover:translate-x-1 hover:scale-[1.02] active:scale-[0.98] active:translate-x-0
            ${isActive ? 'translate-x-1 scale-[1.02]' : ''}`
-        : 'px-0 py-2.5 justify-center hover:scale-110 active:scale-95'
+        : 'hover:scale-110 active:scale-95'
       }
       ${
         isActive
@@ -68,9 +80,11 @@ const NavItem = ({
       }
     `}
   >
-    {/* Icon */}
-    <div className={`shrink-0 ${isActive ? 'opacity-100' : 'opacity-70 group-hover:opacity-100'} transition-opacity`}>
-      {React.cloneElement(icon, { size: 18 } as any)}
+    {/* Fixed-width icon container — always centered in the collapsed sidebar column */}
+    <div className="w-[68px] shrink-0 flex items-center justify-center py-2.5">
+      <div className={`${isActive ? 'opacity-100' : 'opacity-70 group-hover:opacity-100'} transition-opacity`}>
+        {React.cloneElement(icon, { size: 18 } as any)}
+      </div>
     </div>
 
     {/* Label */}
@@ -86,7 +100,7 @@ const NavItem = ({
 
     {/* Active indicator */}
     {isActive && expanded && (
-      <div className="ml-auto w-1 h-4 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)] dark:shadow-[0_0_8px_rgba(245,158,11,0.6)] shrink-0" />
+      <div className="ml-auto mr-3 w-1 h-4 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)] dark:shadow-[0_0_8px_rgba(245,158,11,0.6)] shrink-0" />
     )}
 
     {/* Collapsed tooltip */}
@@ -127,17 +141,22 @@ const HamburgerIcon = ({ open }: { open: boolean }) => (
   </div>
 );
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  user
+}: {
+  children: React.ReactNode;
+  user: UserProfile | null;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+  const supabase = createBrowserSupabaseClient();
+
   const { theme, toggle, mounted } = useLocalTheme();
   const [isLoaded, setIsLoaded] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
-  // Mobile drawer state
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  // Desktop sidebar: collapsed (icons only) by default, expanded on hover
   const [desktopHovered, setDesktopHovered] = useState(false);
   const desktopExpanded = desktopHovered;
 
@@ -166,14 +185,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return segment.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     setMobileOpen(false);
+    await supabase.auth.signOut();
     router.push('/login');
   };
 
   if (!mounted) return null;
 
-  const AUTH_ROUTES = ['/login', '/signup', '/register'];
+  const AUTH_ROUTES = ['/login', '/signup', '/register', '/admin', '/staff', '/verify'];
   const isAuthRoute = AUTH_ROUTES.some((r) => pathname?.startsWith(r));
   if (isAuthRoute) return <>{children}</>;
 
@@ -189,19 +209,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     isMobile?: boolean;
   }) => (
     <>
-      {/* Logo row */}
-      <div className={`h-20 flex items-center shrink-0 transition-all duration-300 ${expanded ? 'px-6' : 'px-0 justify-center'}`}>
+      {/* Logo row — uses the same fixed icon column approach */}
+      <div className="h-20 flex items-center shrink-0">
         {expanded ? (
-          <div className="flex items-center gap-3 flex-1 overflow-hidden">
-            <div className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.3)]">
-              <span className="text-white dark:text-slate-950 font-bold text-lg tracking-tighter">B</span>
+          <div className="flex items-center flex-1 overflow-hidden">
+            <div className="w-[68px] shrink-0 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.3)]">
+                <span className="text-white dark:text-slate-950 font-bold text-lg tracking-tighter">B</span>
+              </div>
             </div>
-            <span className="text-slate-900 dark:text-slate-100 font-semibold text-xl tracking-tight whitespace-nowrap">BlaRiva</span>
-            {/* Close button for mobile */}
+            <span className="text-slate-900 dark:text-slate-100 font-semibold text-xl tracking-tight whitespace-nowrap transition-all duration-300 ease-out opacity-100">BlaRiva</span>
             {isMobile && (
               <button
                 onClick={() => setMobileOpen(false)}
-                className="ml-auto w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                className="ml-auto mr-4 w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
                 aria-label="Close sidebar"
               >
                 <X size={16} />
@@ -209,43 +230,47 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.3)]">
-            <span className="text-white dark:text-slate-950 font-bold text-lg tracking-tighter">B</span>
+          <div className="w-[68px] shrink-0 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.3)]">
+              <span className="text-white dark:text-slate-950 font-bold text-lg tracking-tighter">B</span>
+            </div>
           </div>
         )}
       </div>
 
-      {/* User identity — full card when expanded, avatar only when collapsed */}
-      <div className={`pb-4 shrink-0 transition-all duration-300 ${expanded ? 'px-4' : 'px-2'}`}>
-        {expanded ? (
-          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-100/80 dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.06]">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(245,158,11,0.3)]">
-              <span className="text-xs font-bold text-white dark:text-slate-950">JD</span>
+      {/* User identity */}
+      {user && (
+        <div className="pb-4 shrink-0">
+          {expanded ? (
+            <div className="mx-4 flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-100/80 dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.06]">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+                <span className="text-xs font-bold text-white dark:text-slate-950">{user.initials}</span>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <div className="text-sm font-semibold text-slate-900 dark:text-slate-200 truncate leading-tight">{user.name}</div>
+                <div className="text-[11px] text-slate-400 truncate leading-tight">{user.email}</div>
+              </div>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 uppercase tracking-wide shrink-0">
+                {user.role}
+              </span>
             </div>
-            <div className="flex-1 overflow-hidden">
-              <div className="text-sm font-semibold text-slate-900 dark:text-slate-200 truncate leading-tight">Jane Doe</div>
-              <div className="text-[11px] text-slate-400 truncate leading-tight">jane@company.com</div>
+          ) : (
+            <div className="w-[68px] flex justify-center">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+                <span className="text-xs font-bold text-white dark:text-slate-950">{user.initials}</span>
+              </div>
             </div>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 uppercase tracking-wide shrink-0">
-              Admin
-            </span>
-          </div>
-        ) : (
-          <div className="flex justify-center">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)]">
-              <span className="text-xs font-bold text-white dark:text-slate-950">JD</span>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Divider */}
       <div className="mx-3 mb-4 h-px bg-slate-200 dark:bg-white/[0.04] shrink-0" />
 
-      {/* Nav links */}
-      <div className={`flex-1 flex flex-col gap-1 overflow-y-auto transition-all duration-300 ${expanded ? 'px-4' : 'px-2'}`}>
+      {/* Nav links — no horizontal padding; the NavItem's fixed icon column handles alignment */}
+      <div className="flex-1 flex flex-col gap-1 overflow-y-auto px-0">
         {expanded && (
-          <div className="px-3 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+          <div className="px-7 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
             Platform
           </div>
         )}
@@ -253,14 +278,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <NavItem icon={<LayoutDashboard />} label="Overview"          href="/dashboard" isActive={pathname === '/dashboard'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
         <NavItem icon={<Library />}         label="Knowledge Library" href="/library"   isActive={pathname === '/library'}   expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<MessageSquare />}   label="AI Workspace"      href="/chat"      isActive={pathname === '/chat'}       expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<Bot />}             label="Agent Builder"     href="/builder"   isActive={pathname === '/builder'}    expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<LineChart />}       label="Analytics"         href="/analytics" isActive={pathname === '/analytics'}  expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<MessageSquare />}   label="AI Workspace"      href="/chat"      isActive={pathname === '/chat'}      expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<Bot />}             label="Agent Builder"     href="/builder"   isActive={pathname === '/builder'}   expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<LineChart />}       label="Analytics"         href="/analytics" isActive={pathname === '/analytics'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
 
-        <div className={`h-px bg-slate-200 dark:bg-white/[0.04] my-4 mx-1`} />
+        <div className="h-px bg-slate-200 dark:bg-white/[0.04] my-4 mx-3" />
 
         {expanded && (
-          <div className="px-3 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+          <div className="px-7 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
             Governance
           </div>
         )}
@@ -268,21 +293,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <NavItem icon={<Settings />} label="Settings"      href="/settings" isActive={pathname === '/settings'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
       </div>
 
-      {/* Sign out */}
-      <div className={`border-t border-slate-200 dark:border-white/[0.04] shrink-0 transition-all duration-300 ${expanded ? 'p-4' : 'p-2'}`}>
+      {/* Sign out — same fixed icon column pattern */}
+      <div className="border-t border-slate-200 dark:border-white/[0.04] shrink-0">
         <button
           onClick={handleSignOut}
           title={!expanded ? 'Sign Out' : undefined}
-          className={`
+          className="
             w-full flex items-center rounded-xl
             text-slate-500 dark:text-slate-400
             hover:bg-red-50 dark:hover:bg-red-500/10
             hover:text-red-600 dark:hover:text-red-400
             transition-all duration-200 ease-out group relative
-            ${expanded ? 'gap-3 px-3 py-2.5 justify-start' : 'justify-center px-0 py-2.5'}
-          `}
+          "
         >
-          <LogOut size={17} className="shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
+          <div className="w-[68px] shrink-0 flex items-center justify-center py-2.5">
+            <LogOut size={17} className="opacity-70 group-hover:opacity-100 transition-opacity" />
+          </div>
           <span className={`
             text-sm font-medium tracking-wide whitespace-nowrap overflow-hidden
             transition-all duration-300
@@ -316,7 +342,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Ambient glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-amber-500/10 dark:bg-amber-500/5 blur-[100px] dark:blur-[120px] rounded-full pointer-events-none z-0 transition-all duration-700" />
 
-        {/* ── DESKTOP SIDEBAR — collapsed by default, expands on hover ── */}
+        {/* ── DESKTOP SIDEBAR ── */}
         <nav
           onMouseEnter={() => setDesktopHovered(true)}
           onMouseLeave={() => setDesktopHovered(false)}
@@ -369,11 +395,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}
         `}>
 
-          {/* Top Bar */}
           <header className="h-16 lg:h-20 border-b border-slate-200 dark:border-white/[0.04] bg-white/60 dark:bg-slate-950/30 backdrop-blur-xl flex items-center justify-between px-4 lg:px-8 sticky top-0 z-20 transition-colors duration-500 shrink-0">
-
             <div className="flex items-center gap-3">
-              {/* Hamburger — mobile only, animated */}
               <button
                 onClick={() => setMobileOpen((prev) => !prev)}
                 className="lg:hidden w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 active:scale-90 transition-all duration-200"
@@ -383,7 +406,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <HamburgerIcon open={mobileOpen} />
               </button>
 
-              {/* Mobile logo */}
               <div className="lg:hidden flex items-center gap-2">
                 <div className="w-6 h-6 rounded-md bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_8px_rgba(245,158,11,0.3)]">
                   <span className="text-white font-bold text-xs">B</span>
@@ -391,7 +413,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="text-slate-900 dark:text-slate-100 font-semibold text-base tracking-tight">BlaRiva</span>
               </div>
 
-              {/* Breadcrumb — desktop */}
               <div className="hidden lg:flex items-center gap-4 text-sm font-medium text-slate-500 dark:text-slate-400">
                 <span>BlaRiva OS</span>
                 <ChevronRight size={14} className="text-slate-300 dark:text-slate-600" />
@@ -399,7 +420,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            {/* Right actions */}
             <div className="flex items-center gap-2 lg:gap-4 xl:gap-6">
               <div className="relative group hidden sm:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 group-focus-within:text-amber-500 transition-colors" />

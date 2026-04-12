@@ -71,7 +71,7 @@ export function PublicNavbar() {
 
         {/* CTA buttons */}
         <div className="hidden md:flex items-center gap-2 shrink-0">
-          <Link href="/staff"  className="btn-ghost text-sm">Staff Access</Link>
+          <Link href="/member"  className="btn-ghost text-sm">Member Access</Link>
           <Link href="/admin" className="btn-primary text-sm">Get Started</Link>
         </div>
 

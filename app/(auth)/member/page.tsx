@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, Shield } from "lucide-react";
-import { sendOtp } from "./db_service";
+import { AlertCircle, UserCircle } from "lucide-react";
+import { sendOtp } from "../admin/db_service";
 
-export default function AdminAuthPage() {
+export default function StaffAuthPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -23,7 +23,7 @@ export default function AdminAuthPage() {
     const response = await sendOtp(email);
 
     if (response.success) {
-      router.push(`/verify?email=${encodeURIComponent(email)}&role=admin`);
+      router.push(`/verify?email=${encodeURIComponent(email)}&role=member`);
       return;
     }
 
@@ -49,18 +49,18 @@ export default function AdminAuthPage() {
 
         <h1 className="font-display text-2xl font-black mb-1">Welcome to BlaRiva</h1>
         <p className="text-sm text-white/40 mb-8">
-          Enter your work email to sign in or create your organization
+          Enter your work email to sign in to your workspace
         </p>
 
         <div
           className="flex items-center gap-2.5 px-4 py-3 rounded-xl mb-8 border"
-          style={{ background: "rgba(245,158,11,0.06)", borderColor: "rgba(245,158,11,0.2)" }}
+          style={{ background: "rgba(99,102,241,0.06)", borderColor: "rgba(99,102,241,0.2)" }}
         >
-          <Shield className="w-5 h-5 shrink-0" style={{ color: "#f59e0b" }} />
+          <UserCircle className="w-5 h-5 shrink-0" style={{ color: "#818cf8" }} />
           <div>
-            <p className="text-sm font-bold" style={{ color: "#f59e0b" }}>Organization Admin</p>
+            <p className="text-sm font-bold" style={{ color: "#818cf8" }}>Organization Member</p>
             <p className="text-xs text-white/40">
-              Sign in to manage your organization, departments, and members.
+              Sign in to access your organization's knowledge base.
             </p>
           </div>
         </div>
@@ -117,14 +117,12 @@ export default function AdminAuthPage() {
         </form>
 
         <p className="text-center text-xs text-white/20 mt-6 leading-relaxed">
-          By continuing, you agree to our{" "}
-          <a href="#" className="text-gold/50 hover:text-gold/80">Terms</a> and{" "}
-          <a href="#" className="text-gold/50 hover:text-gold/80">Privacy Policy</a>.
+          Your organization added you by email — just sign in and your access is ready.
         </p>
 
         <p className="text-center text-sm text-white/30 mt-5">
-          Are you a member in an organization?{" "}
-          <Link href="/member" className="text-gold/80 hover:text-gold transition-colors font-medium">
+          Are you an organization admin?{" "}
+          <Link href="/admin" className="text-gold/80 hover:text-gold transition-colors font-medium">
             Sign in here
           </Link>
         </p>
