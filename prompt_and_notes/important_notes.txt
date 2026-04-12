@@ -4,6 +4,8 @@
 
 #### The "I Don't Know" Guardrail: You must strictly prompt the LLM to refuse to answer if the context isn't in the retrieved chunks. It should say, "I couldn't find information about this in the [Department] container," rather than trying to guess.
 
+
+####### if the document is too long and unorganized, suggest to split it into containers (suggest container and automatically split the text into those containers)
 ----------------------
 2. Admin & Analytics Dashboard
 
@@ -14,3 +16,4 @@
 #Departmental Usage Stats: See which departments are using the tool the most. If Sales is using it heavily but HR is not, you know where to focus your onboarding efforts.
 
 
+--------

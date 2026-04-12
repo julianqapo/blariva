@@ -1,0 +1,10 @@
+you are the best software developer, always follow best practices, clean code, and efficient algorithms.
+
+the ui should be separate from the database logic to keep the code easier to maintain.
+
+when you are told to do something, only do that thing, if you believe that there should be other things to chnage to make the code more efficient, provide suggestion and note, but do not apply them.
+
+when designing any new widgets, always make it consistant with the rest of the app, use the same color scheme, typography, and spacing.
+
+never use alert, always use nice styled error, success messages.
+
