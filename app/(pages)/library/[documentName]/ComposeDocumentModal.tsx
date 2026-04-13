@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import { X, PenLine, Loader2, Bold, Italic, List, Heading2, Heading3, ListOrdered, Minus} from "lucide-react";
+import { X, PenLine, Loader2, Bold, Italic, List, Heading2, Heading3, ListOrdered, Minus, AlertCircle } from "lucide-react";
 
 type Props = {
   open: boolean;
@@ -17,24 +16,28 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => { setMounted(true); }, []);
+  const [wordCount, setWordCount] = useState(0);
+  const [charCount, setCharCount] = useState(0);
 
   const editor = useEditor({
-  immediatelyRender: false,
-  extensions: [
-    StarterKit,
-    Placeholder.configure({
-      placeholder: "Start writing your document here…",
-    }),
-  ],
-  editorProps: {
-    attributes: {
-      class: "tiptap-editor",
+    immediatelyRender: false,
+    extensions: [
+      StarterKit,
+      Placeholder.configure({
+        placeholder: "Start writing your document here…",
+      }),
+    ],
+    editorProps: {
+      attributes: {
+        class: "tiptap-editor",
+      },
     },
-  },
-});
+    onUpdate: ({ editor }) => {
+      const text = editor.getText();
+      setCharCount(text.length);
+      setWordCount(text.trim() ? text.trim().split(/\s+/).length : 0);
+    },
+  });
 
   // Reset on open
   useEffect(() => {
@@ -42,6 +45,8 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
       setTitle("");
       setError("");
       setLoading(false);
+      setWordCount(0);
+      setCharCount(0);
       editor?.commands.clearContent();
       setTimeout(() => {
         (document.getElementById("doc-title") as HTMLInputElement)?.focus();
@@ -67,6 +72,7 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
     const trimmedTitle = title.trim();
     const html = editor?.getHTML() ?? "";
     const textContent = editor?.getText().trim() ?? "";
@@ -88,7 +94,7 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
     }
   }
 
-  if (!mounted || !open) return null;
+  if (!open) return null;
 
   const ToolbarButton = ({
     onClick,
@@ -135,7 +141,7 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
     <div className="w-px h-5 mx-1 shrink-0" style={{ background: "var(--border)" }} />
   );
 
-  return createPortal(
+  return (
     <>
       <div
         className="fixed inset-0 flex items-center justify-center p-4"
@@ -186,21 +192,7 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
             <div className="flex flex-col gap-0 flex-1 min-h-0">
 
-              {/* Error */}
-              {error && (
-                <div
-                  className="mx-6 mt-4 p-3 rounded-xl text-sm font-medium shrink-0"
-                  style={{
-                    background: "rgba(239,68,68,0.08)",
-                    border: "1px solid rgba(239,68,68,0.2)",
-                    color: "#f87171",
-                  }}
-                >
-                  {error}
-                </div>
-              )}
-
-              {/* Title input — borderless, large */}
+              {/* Title input */}
               <div className="px-6 pt-5 pb-3 shrink-0">
                 <input
                   id="doc-title"
@@ -212,6 +204,7 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
                   onChange={(e) => { setTitle(e.target.value); setError(""); }}
                   maxLength={120}
                   disabled={loading}
+                  required
                 />
               </div>
 
@@ -280,7 +273,6 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
                 >
                   <Minus size={15} />
                 </ToolbarButton>
-
               </div>
 
               {/* Editor content area */}
@@ -294,32 +286,65 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
 
             {/* Footer */}
             <div
-              className="flex items-center justify-between gap-3 px-6 py-4 shrink-0"
+              className="flex flex-col gap-3 px-6 py-4 shrink-0"
               style={{ borderTop: "1px solid var(--border)" }}
             >
-              <p className="text-xs hidden sm:block" style={{ color: "var(--muted)", opacity: 0.6 }}>
-                Select text to apply formatting · Saved to current container
-              </p>
-              <div className="flex items-center gap-3 ml-auto">
-                <button type="button" onClick={onClose} className="btn-ghost" disabled={loading}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary flex items-center justify-center gap-2 min-w-[140px]"
-                  disabled={loading || !title.trim() || !editor?.getText().trim()}
+              {/* Error banner */}
+              {error && (
+                <div
+                  className="flex items-start gap-2 p-3 rounded-xl text-sm font-medium animate-fade-in-up"
+                  style={{
+                    background: "rgba(239,68,68,0.08)",
+                    border: "1px solid rgba(239,68,68,0.25)",
+                    color: "#f87171",
+                  }}
                 >
-                  {loading
-                    ? <><Loader2 size={15} className="animate-spin" /> Saving…</>
-                    : <><PenLine size={14} /> Save Document</>}
-                </button>
+                  <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">{error}</p>
+                </div>
+              )}
+
+              {/* Action row */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="hidden sm:flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold tabular-nums" style={{ color: "var(--text)" }}>
+                      {wordCount}
+                    </span>
+                    <span className="text-xs" style={{ color: "var(--muted)", opacity: 0.6 }}>
+                      {wordCount === 1 ? "word" : "words"}
+                    </span>
+                  </div>
+                  <div className="w-px h-3" style={{ background: "var(--border)" }} />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold tabular-nums" style={{ color: "var(--text)" }}>
+                      {charCount}
+                    </span>
+                    <span className="text-xs" style={{ color: "var(--muted)", opacity: 0.6 }}>
+                      {charCount === 1 ? "char" : "chars"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 ml-auto">
+                  <button type="button" onClick={onClose} className="btn-ghost" disabled={loading}>
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn-primary flex items-center justify-center gap-2 min-w-[140px]"
+                    disabled={loading}
+                  >
+                    {loading
+                      ? <><Loader2 size={15} className="animate-spin" /> Saving…</>
+                      : <><PenLine size={14} /> Save Document</>}
+                  </button>
+                </div>
               </div>
             </div>
           </form>
         </div>
       </div>
 
-      {/* Tiptap editor styles */}
       <style>{`
         .tiptap-editor {
           outline: none;
@@ -367,7 +392,6 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
           height: 0;
         }
       `}</style>
-    </>,
-    document.body
+    </>
   );
 }
