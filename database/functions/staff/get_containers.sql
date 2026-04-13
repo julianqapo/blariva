@@ -17,11 +17,15 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  v_workspace jsonb;
   v_company_id uuid;
+  v_company_email text;
   v_result jsonb;
 BEGIN
   -- Step 1: Securely fetch the active company ID
-  v_company_id := public.get_member_company_id();
+  v_workspace := public.get_member_company_id();
+  v_company_id := (v_workspace->>'id')::uuid;
+  v_company_email := (v_workspace->>'email')::text;
 
   -- Step 2: Security Check - Block if they are deactivated or have no workspace
   IF v_company_id IS NULL THEN

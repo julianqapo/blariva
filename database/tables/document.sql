@@ -6,7 +6,10 @@ create table public.document (
   name text not null,
   id_container uuid not null,
   path text not null,
+  file_size integer not null,
+  id_file_status smallint null,
   constraint document_pkey primary key (id),
   constraint document_id_company_fkey foreign KEY (id_company) references company (id) on update CASCADE on delete CASCADE,
-  constraint document_id_container_fkey foreign KEY (id_container) references container (id) on update CASCADE on delete CASCADE
+  constraint document_id_container_fkey foreign KEY (id_container) references container (id) on update CASCADE on delete CASCADE,
+  constraint document_id_file_status_fkey foreign KEY (id_file_status) references file_status (id) on update CASCADE on delete CASCADE
 ) TABLESPACE pg_default;

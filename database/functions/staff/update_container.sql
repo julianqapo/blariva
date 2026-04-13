@@ -17,7 +17,9 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  v_workspace jsonb;
   v_company_id uuid;
+  v_company_email text;
   v_expiry_date date;
   v_updated_id uuid;
   v_email text;
@@ -25,7 +27,9 @@ DECLARE
 BEGIN
   -- Step 1: Securely get the user's email and their active company ID
   v_email := auth.email();
-  v_company_id := public.get_member_company_id();
+  v_workspace := public.get_member_company_id();
+  v_company_id := (v_workspace->>'id')::uuid;
+  v_company_email := (v_workspace->>'email')::text;
 
   -- Step 2: Security Check - Block if they are deactivated or have no workspace
   IF v_company_id IS NULL THEN

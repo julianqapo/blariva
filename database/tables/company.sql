@@ -1,5 +1,5 @@
 create table public.company (
-  id uuid not null default auth.uid (),
+  id uuid not null default gen_random_uuid (),
   created_at timestamp with time zone not null default (now() AT TIME ZONE 'utc'::text),
   name text not null default 'Company Name'::text,
   email text not null default auth.email (),

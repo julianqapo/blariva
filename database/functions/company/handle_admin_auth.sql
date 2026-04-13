@@ -13,7 +13,6 @@ DECLARE
   v_uid uuid;
   v_company_id uuid;
   v_staff_id uuid;
-  v_new_id uuid;
 BEGIN
   -- ==========================================
   -- Step 0: Extract email from JWT safely
@@ -36,7 +35,7 @@ BEGIN
   -- ==========================================
   SELECT id INTO v_company_id 
   FROM public.company 
-  WHERE email = v_email AND id = v_uid
+  WHERE email = v_email
   LIMIT 1;
 
   IF v_company_id IS NOT NULL THEN
@@ -67,14 +66,21 @@ BEGIN
   END IF;
 
   -- ==========================================
-  -- Step 3: If neither exists, CREATE COMPANY
+  -- Step 3: If neither exists, CREATE COMPANY and Staff account for the owner
   -- ==========================================
   INSERT INTO public.company (
     expiry_date
   ) VALUES (
     CURRENT_DATE + INTERVAL '30 days'
   )
-  RETURNING id INTO v_new_id;
+  RETURNING id INTO v_company_id;
+
+  INSERT INTO public.staff (
+    id_company
+  ) VALUES (
+    v_company_id
+  )
+  RETURNING id INTO v_staff_id;
 
   -- ==========================================
   -- Step 4: Log the creation event
@@ -87,7 +93,7 @@ BEGIN
     format('Organization created via Initial Sign-Up. Email: "%s", Expiry Date: %s.', 
            v_email, 
            (CURRENT_DATE + INTERVAL '30 days')::date),
-           v_new_id,
+           v_company_id,
            v_email
            );
 
@@ -98,7 +104,7 @@ BEGIN
     'success', true,
     'message', 'Company created successfully.',
     'data', jsonb_build_object(
-      'id', v_new_id, 
+      'id', v_company_id, 
       'role', 'Admin'
     )
   );

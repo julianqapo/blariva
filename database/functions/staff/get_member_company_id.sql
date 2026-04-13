@@ -1,31 +1,36 @@
 -- ==============================================================================
 -- FUNCTION: public.get_member_company_id
--- PURPOSE: Retrieves the company ID (id_company) for the currently authenticated 
---          and active staff member. Used to securely route users to their specific 
---          workspace or strictly scope their database queries to their organization.
+-- PURPOSE: Retrieves both the company ID and the company email for the 
+--          currently authenticated and active staff member.
 -- ==============================================================================
 
--- 1. CLEANUP
+-- 1. CLEANUP (Note: We must drop because the return type is changing from uuid to jsonb)
 DROP FUNCTION IF EXISTS public.get_member_company_id();
 
 -- 2. CREATE FUNCTION
 CREATE OR REPLACE FUNCTION public.get_member_company_id()
-RETURNS uuid
+RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_company_id uuid;
+  v_result jsonb;
 BEGIN
-  -- Securely check the staff table using the built-in Supabase session ID
-  SELECT id_company INTO v_company_id
-  FROM public.staff
-  WHERE id = auth.uid() 
-    AND is_active = true
+  -- We perform a JOIN to get the email directly from the company table
+  SELECT 
+    jsonb_build_object(
+      'id', c.id,
+      'email', c.email
+    ) INTO v_result
+  FROM public.staff s
+  JOIN public.company c ON s.id_company = c.id
+  WHERE s.id = auth.uid() 
+    AND s.is_active = true
+    AND c.expiry_date >= CURRENT_DATE -- Optional: safety check if you want to block expired here too
   LIMIT 1;
 
-  -- This returns the UUID of the company, or NULL if they are not an active staff member
-  RETURN v_company_id;
+  -- Returns the object { "id": "...", "email": "..." } or NULL if not found/inactive
+  RETURN v_result;
 END;
 $$;
