@@ -5,11 +5,13 @@ import { useSearchParams } from "next/navigation";
 import {
   Plus, Upload, PenLine, Search, FileText, FolderOpen,
   Loader2, File as FileIcon, Image as ImageIcon,
-  ArrowUp, ArrowDown, RefreshCw,
+  ArrowUp, ArrowDown, RefreshCw, MoreHorizontal, Pencil, Trash2,
 } from "lucide-react";
 import ComposeDocumentModal from "./ComposeDocumentModal";
 import UploadFilesModal from "./UploadFilesModal";
 import ViewDocumentModal from "./ViewDocumentModal";
+import RenameDocumentModal from "./RenameDocumentModal";
+import DeleteDocumentModal from "./DeleteDocumentModal";
 import { fetchDocumentsByContainer } from "./document_actions";
 
 type Document = {
@@ -141,6 +143,13 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
     path: string;
     content: string;
   } | null>(null);
+
+  // Rename / Delete document modals
+  const [renameDoc, setRenameDoc] = useState<{ id: string; name: string } | null>(null);
+  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [deleteDoc, setDeleteDoc] = useState<{ id: string; name: string } | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -476,12 +485,15 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
                 <th className="text-center px-4 py-3" style={{ borderBottom: "1px solid var(--border)", width: "110px" }}>
                   <SortHeader label="Status" sortKey="status" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} align="center" />
                 </th>
+                <th className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)", width: "60px" }}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {sortedDocs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-12">
+                  <td colSpan={6} className="text-center py-12">
                     <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
                       No matching documents
                     </p>
@@ -545,6 +557,86 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
                           {status.label}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="relative inline-block">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenuId(openMenuId === doc.id ? null : doc.id);
+                            }}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
+                            style={{ color: "var(--muted)" }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "rgba(245,158,11,0.08)";
+                              e.currentTarget.style.color = "var(--primary)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "transparent";
+                              e.currentTarget.style.color = "var(--muted)";
+                            }}
+                          >
+                            <MoreHorizontal size={15} />
+                          </button>
+
+                          {openMenuId === doc.id && (
+                            <>
+                              {/* Invisible overlay to close menu on outside click */}
+                              <div
+                                className="fixed inset-0 z-40"
+                                onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); }}
+                              />
+                              <div
+                                className="absolute right-0 top-full mt-1 z-50 w-40 rounded-xl overflow-hidden shadow-xl animate-fade-in-up"
+                                style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+                              >
+                                <div className="p-1">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenMenuId(null);
+                                      setRenameDoc({ id: doc.id, name: doc.name });
+                                      setIsRenameOpen(true);
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                                    style={{ color: "var(--text)" }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = "rgba(245,158,11,0.08)";
+                                      e.currentTarget.style.color = "var(--primary)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = "transparent";
+                                      e.currentTarget.style.color = "var(--text)";
+                                    }}
+                                  >
+                                    <Pencil size={13} />
+                                    Rename
+                                  </button>
+                                  <div className="h-px mx-2 my-0.5" style={{ background: "var(--border)" }} />
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenMenuId(null);
+                                      setDeleteDoc({ id: doc.id, name: doc.name });
+                                      setIsDeleteOpen(true);
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                                    style={{ color: "#f87171" }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = "rgba(239,68,68,0.08)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = "transparent";
+                                    }}
+                                  >
+                                    <Trash2 size={13} />
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
@@ -580,6 +672,20 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
             document={viewDoc}
             containerId={containerId}
             refreshKey={viewRefreshKey}
+          />
+
+          <RenameDocumentModal
+            open={isRenameOpen}
+            onClose={() => { setIsRenameOpen(false); setRenameDoc(null); }}
+            onSuccess={handleDocumentSaved}
+            document={renameDoc}
+          />
+
+          <DeleteDocumentModal
+            open={isDeleteOpen}
+            onClose={() => { setIsDeleteOpen(false); setDeleteDoc(null); }}
+            onSuccess={handleDocumentSaved}
+            document={deleteDoc}
           />
         </>
       )}

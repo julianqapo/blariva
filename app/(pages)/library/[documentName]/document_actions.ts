@@ -159,3 +159,56 @@ export async function getSignedUrl(path: string) {
 
   return { success: true, url: data.signedUrl, message: "OK" };
 }
+
+/**
+ * Deletes a document via the delete-document edge function.
+ * Removes both the storage file and the database row.
+ */
+export async function deleteDocument(documentId: string) {
+  const supabase = createServerSupabaseClient();
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    return { success: false, message: "Not authenticated" };
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/delete-document`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ document_id: documentId }),
+  });
+
+  const data = await res.json();
+  return { success: data.success, message: data.message || "" };
+}
+
+/**
+ * Renames a document via the update_document_name RPC.
+ */
+export async function renameDocument(documentId: string, newName: string) {
+  const supabase = createServerSupabaseClient();
+
+  const { data, error } = await supabase.rpc("update_document_name", {
+    p_document_id: documentId,
+    p_new_name: newName,
+  });
+
+  if (error) {
+    return { success: false, message: error.message };
+  }
+
+  // The RPC returns jsonb: { success, message, data }
+  return {
+    success: data?.success ?? false,
+    message: data?.message ?? "Unknown error",
+    data: data?.data ?? null,
+  };
+}
