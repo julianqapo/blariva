@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import {
   X,
   FileText,
@@ -11,6 +11,11 @@ import {
   Eye,
   Download,
 } from "lucide-react";
+import {
+  getSignedUrl,
+  getTextFileContent,
+  getBinaryFileBase64,
+} from "./document_actions";
 import { createBrowserSupabaseClient } from "../../../utils/supabase_browser";
 
 type DocumentRecord = {
@@ -73,14 +78,12 @@ export default function ViewDocumentModal({
 }: Props) {
   const [content, setContent] = useState("");
   const [editContent, setEditContent] = useState("");
-  const [blobUrl, setBlobUrl] = useState("");
-  const [downloadUrl, setDownloadUrl] = useState("");
+  const [signedUrl, setSignedUrl] = useState("");
   const [wordHtml, setWordHtml] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [isEditing, setIsEditing] = useState(false);
-  const blobUrlRef = useRef("");
 
   const ext = getFileExt(doc?.name || "");
   const isMarkdown = ext === "md" || ext === "markdown";
@@ -93,34 +96,17 @@ export default function ViewDocumentModal({
   const isTextBased = isMarkdown || isTxt;
   const isEditable = isMarkdown || isTxt;
 
-  // Clean up blob URL on unmount/re-fetch
-  useEffect(() => {
-    return () => {
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = "";
-      }
-    };
-  }, []);
-
   // Fetch file content on open
   useEffect(() => {
     if (open && doc) {
       setIsEditing(false);
       setError("");
       setContent("");
-      setBlobUrl("");
-      setDownloadUrl("");
+      setSignedUrl("");
       setWordHtml("");
-
-      // Revoke old blob URL
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = "";
-      }
-
       fetchContent();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, doc]);
 
   async function fetchContent() {
@@ -129,67 +115,75 @@ export default function ViewDocumentModal({
     setError("");
 
     try {
-      const supabase = createBrowserSupabaseClient();
-
       if (isTextBased) {
-        // For text-based files, download and read as text
-        const { data, error: dlError } = await supabase.storage
-          .from("document")
-          .download(doc.path);
-
-        if (dlError || !data) {
-          setError("Could not load file content.");
+        // Use server action to get text content
+        const result = await getTextFileContent(doc.path);
+        if (!result.success) {
+          setError(result.message || "Could not load file content.");
+          setIsLoading(false);
+          return;
+        }
+        setContent(result.content);
+        setEditContent(result.content);
+      } else if (isPdf || isImage) {
+        // Use server action to get a signed URL
+        const result = await getSignedUrl(doc.path);
+        if (!result.success) {
+          setError(result.message || "Could not load file.");
+          setIsLoading(false);
+          return;
+        }
+        setSignedUrl(result.url);
+      } else if (isDocx) {
+        // Use server action to get base64 binary, then render with mammoth.js client-side
+        const result = await getBinaryFileBase64(doc.path);
+        if (!result.success) {
+          setError(result.message || "Could not load Word document.");
           setIsLoading(false);
           return;
         }
 
-        const text = await data.text();
-        setContent(text);
-        setEditContent(text);
-      } else {
-        // For binary files, download the blob directly
-        const { data, error: dlError } = await supabase.storage
-          .from("document")
-          .download(doc.path);
+        try {
+          // Convert base64 to ArrayBuffer
+          const binaryString = atob(result.base64);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const arrayBuffer = bytes.buffer;
 
-        if (dlError || !data) {
-          setError("Could not load file.");
-          setIsLoading(false);
-          return;
-        }
-
-        // Create a download URL from the blob
-        const url = URL.createObjectURL(data);
-        blobUrlRef.current = url;
-        setDownloadUrl(url);
-
-        if (isPdf) {
-          // For PDFs, use the blob URL directly in the iframe
-          setBlobUrl(url);
-        } else if (isImage) {
-          // For images, use the blob URL directly
-          setBlobUrl(url);
-        } else if (isDocx) {
-          // For .docx, use mammoth.js to convert to HTML
-          try {
-            const mammoth = await import("mammoth");
-            const arrayBuffer = await data.arrayBuffer();
-            const result = await mammoth.default.convertToHtml(
-              { arrayBuffer },
-              {
-                convertImage: mammoth.default.images.imgElement(function (image: { contentType: string; readAsBase64String: () => Promise<string> }) {
+          // Use mammoth browser build
+          const mammoth = await import("mammoth");
+          // mammoth is CommonJS — handle both default and named exports
+          const mammothLib = mammoth.default || mammoth;
+          const mammothResult = await mammothLib.convertToHtml(
+            { arrayBuffer },
+            {
+              convertImage: mammothLib.images.imgElement(
+                function (image: { contentType: string; readAsBase64String: () => Promise<string> }) {
                   return image.readAsBase64String().then(function (imageBuffer: string) {
                     return { src: "data:" + image.contentType + ";base64," + imageBuffer };
                   });
-                }),
-              }
-            );
-            setWordHtml(result.value);
-          } catch {
-            setError("Failed to render Word document. You can download it instead.");
-          }
+                }
+              ),
+            }
+          );
+          setWordHtml(mammothResult.value);
+        } catch {
+          setError("Failed to render Word document. You can download it instead.");
         }
-        // For .doc (old format), we just show a download prompt
+
+        // Also get a signed URL for download
+        const urlResult = await getSignedUrl(doc.path);
+        if (urlResult.success) {
+          setSignedUrl(urlResult.url);
+        }
+      } else if (isDoc) {
+        // Old .doc format — just get a download URL
+        const result = await getSignedUrl(doc.path);
+        if (result.success) {
+          setSignedUrl(result.url);
+        }
       }
     } catch {
       setError("Failed to fetch document.");
@@ -213,8 +207,9 @@ export default function ViewDocumentModal({
       }
 
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const blob = new Blob([editContent], { type: isTxt ? "text/plain" : "text/markdown" });
-      const file = new File([blob], doc.name, { type: isTxt ? "text/plain" : "text/markdown" });
+      const mimeType = isTxt ? "text/plain" : "text/markdown";
+      const blob = new Blob([editContent], { type: mimeType });
+      const file = new File([blob], doc.name, { type: mimeType });
 
       const formData = new FormData();
       formData.append("id_container", containerId);
@@ -235,6 +230,7 @@ export default function ViewDocumentModal({
         return;
       }
 
+      // Update local state so the view refreshes immediately
       setContent(editContent);
       setIsEditing(false);
       onSuccess();
@@ -256,13 +252,28 @@ export default function ViewDocumentModal({
   }
 
   function handleDownload() {
-    if (!downloadUrl || !doc) return;
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = doc.name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    if (!doc) return;
+    // For text files, create a blob download; for binary files use signed URL
+    if (isTextBased && content) {
+      const blob = new Blob([content], { type: isTxt ? "text/plain" : "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else if (signedUrl) {
+      const a = document.createElement("a");
+      a.href = signedUrl;
+      a.download = doc.name;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   }
 
   // Escape to close
@@ -283,7 +294,8 @@ export default function ViewDocumentModal({
 
   if (!open || !doc) return null;
 
-  const hasContent = content || blobUrl || wordHtml;
+  const hasContent = content || signedUrl || wordHtml;
+  const canDownload = isTextBased ? !!content : !!signedUrl;
 
   return (
     <>
@@ -355,8 +367,8 @@ export default function ViewDocumentModal({
                 </button>
               )}
 
-              {/* Download button for binary files */}
-              {(isPdf || isImage || isWord) && downloadUrl && !isLoading && (
+              {/* Download button */}
+              {canDownload && !isLoading && (
                 <button
                   onClick={handleDownload}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
@@ -444,9 +456,9 @@ export default function ViewDocumentModal({
                 {content}
               </pre>
             ) : isPdf ? (
-              /* PDF viewer — using blob URL in iframe */
+              /* PDF viewer — using signed URL in iframe (works in all browsers) */
               <iframe
-                src={blobUrl}
+                src={`${signedUrl}#toolbar=1&navpanes=0`}
                 className="flex-1 w-full"
                 style={{ border: "none" }}
                 title={doc.name}
@@ -455,7 +467,7 @@ export default function ViewDocumentModal({
               /* Image viewer */
               <div className="flex items-center justify-center flex-1 p-6 overflow-auto">
                 <img
-                  src={blobUrl}
+                  src={signedUrl}
                   alt={doc.name}
                   className="max-w-full max-h-full object-contain rounded-lg"
                   style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.2)" }}
@@ -482,13 +494,15 @@ export default function ViewDocumentModal({
                 <p className="text-xs mb-4 text-center" style={{ color: "var(--muted)" }}>
                   Legacy .doc files cannot be previewed in the browser. Use the Download button to open it in Word.
                 </p>
-                <button
-                  onClick={handleDownload}
-                  className="btn-primary flex items-center gap-2 px-5 py-2.5 text-sm"
-                >
-                  <Download size={14} />
-                  Download {doc.name}
-                </button>
+                {signedUrl && (
+                  <button
+                    onClick={handleDownload}
+                    className="btn-primary flex items-center gap-2 px-5 py-2.5 text-sm"
+                  >
+                    <Download size={14} />
+                    Download {doc.name}
+                  </button>
+                )}
               </div>
             ) : (
               /* Fallback */
