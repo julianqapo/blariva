@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Plus, Upload, PenLine, Search, FileText, FolderOpen, Loader2, File as FileIcon, Image as ImageIcon } from "lucide-react";
 import ComposeDocumentModal from "./ComposeDocumentModal";
 import UploadFilesModal from "./UploadFilesModal";
+import ViewDocumentModal from "./ViewDocumentModal";
 import { fetchDocumentsByContainer } from "./document_actions";
 
 type Document = {
@@ -36,8 +37,14 @@ function getDocIcon(name: string) {
   if (ext === "pdf") return <FileText size={16} className="text-red-400" />;
   if (ext === "doc" || ext === "docx") return <FileText size={16} className="text-blue-500" />;
   if (ext === "txt") return <FileText size={16} className="text-gray-400" />;
+  if (ext === "md" || ext === "markdown") return <FileText size={16} className="text-purple-400" />;
   if (["png", "jpg", "jpeg"].includes(ext || "")) return <ImageIcon size={16} className="text-blue-400" />;
   return <FileIcon size={16} style={{ color: "var(--muted)" }} />;
+}
+
+function isViewable(name: string): boolean {
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  return ["md", "markdown", "txt"].includes(ext);
 }
 
 export default function ContainerDetail({ params }: { params: Promise<{ documentName: string }> }) {
@@ -49,6 +56,18 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // View document modal
+  const [viewDoc, setViewDoc] = useState<Document | null>(null);
+  const [isViewOpen, setIsViewOpen] = useState(false);
+
+  // Edit document (when opening ComposeDocumentModal in edit mode from ViewDocumentModal)
+  const [editDocData, setEditDocData] = useState<{
+    id: string;
+    name: string;
+    path: string;
+    content: string;
+  } | null>(null);
 
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -76,6 +95,23 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
     }
 
     setIsLoading(false);
+  }
+
+  function handleDocumentClick(doc: Document) {
+    if (isViewable(doc.name)) {
+      setViewDoc(doc);
+      setIsViewOpen(true);
+    }
+  }
+
+  function handleOpenEditor(docData: { id: string; name: string; path: string; content: string }) {
+    setEditDocData(docData);
+    setIsComposeOpen(true);
+  }
+
+  function handleCloseCompose() {
+    setIsComposeOpen(false);
+    setEditDocData(null);
   }
 
   const filteredDocs = documents.filter((d) =>
@@ -182,7 +218,7 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
 
                   {/* Write */}
                   <button
-                    onClick={() => setIsComposeOpen(true)}
+                    onClick={() => { setEditDocData(null); setIsComposeOpen(true); }}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg
                       text-sm font-medium transition-colors duration-150 whitespace-nowrap text-left"
                     style={{ color: "var(--text)" }}
@@ -263,7 +299,7 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
               </button>
 
               <button
-                onClick={() => setIsComposeOpen(true)}
+                onClick={() => { setEditDocData(null); setIsComposeOpen(true); }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95"
                 style={{
                   background: "var(--primary)",
@@ -281,13 +317,27 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
         <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
           {filteredDocs.map((doc) => {
             const status = getStatusLabel(doc.id_file_status);
+            const viewable = isViewable(doc.name);
             return (
               <div
                 key={doc.id}
-                className="flex items-center gap-4 px-4 py-3 rounded-xl transition-colors"
+                onClick={() => handleDocumentClick(doc)}
+                className={`flex items-center gap-4 px-4 py-3 rounded-xl transition-colors ${
+                  viewable ? "cursor-pointer" : ""
+                }`}
                 style={{
                   background: "var(--surface)",
                   border: "1px solid var(--border)",
+                }}
+                onMouseEnter={(e) => {
+                  if (viewable) {
+                    e.currentTarget.style.borderColor = "var(--primary)";
+                    e.currentTarget.style.background = "rgba(245,158,11,0.03)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border)";
+                  e.currentTarget.style.background = "var(--surface)";
                 }}
               >
                 <div className="shrink-0">{getDocIcon(doc.name)}</div>
@@ -325,18 +375,32 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
       )}
 
       {/* Modals */}
-      <ComposeDocumentModal
-        open={isComposeOpen}
-        onClose={() => setIsComposeOpen(false)}
-      />
-
       {containerId && (
-        <UploadFilesModal
-          open={isUploadOpen}
-          onClose={() => setIsUploadOpen(false)}
-          onSuccess={() => loadDocuments()}
-          containerId={containerId}
-        />
+        <>
+          <ComposeDocumentModal
+            open={isComposeOpen}
+            onClose={handleCloseCompose}
+            onSuccess={() => loadDocuments()}
+            containerId={containerId}
+            editDocument={editDocData}
+          />
+
+          <UploadFilesModal
+            open={isUploadOpen}
+            onClose={() => setIsUploadOpen(false)}
+            onSuccess={() => loadDocuments()}
+            containerId={containerId}
+          />
+
+          <ViewDocumentModal
+            open={isViewOpen}
+            onClose={() => { setIsViewOpen(false); setViewDoc(null); }}
+            onSuccess={() => loadDocuments()}
+            onOpenEditor={handleOpenEditor}
+            document={viewDoc}
+            containerId={containerId}
+          />
+        </>
       )}
     </div>
   );

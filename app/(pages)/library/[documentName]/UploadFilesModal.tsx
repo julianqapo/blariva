@@ -36,12 +36,14 @@ const ALLOWED_TYPES = [
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/plain",
+  "text/markdown",
+  "text/x-markdown",
   "image/png",
   "image/jpeg",
   "image/jpg",
 ];
 
-const ALLOWED_EXTENSIONS = [".pdf", ".doc", ".docx", ".txt", ".png", ".jpeg", ".jpg"];
+const ALLOWED_EXTENSIONS = [".pdf", ".doc", ".docx", ".txt", ".md", ".png", ".jpeg", ".jpg"];
 
 function getFileIcon(type: string) {
   if (type.startsWith("image/")) return <ImageIcon size={16} className="text-blue-400" />;

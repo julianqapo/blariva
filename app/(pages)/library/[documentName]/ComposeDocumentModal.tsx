@@ -4,20 +4,97 @@ import { useEffect, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import { X, PenLine, Loader2, Bold, Italic, List, Heading2, Heading3, ListOrdered, Minus, AlertCircle } from "lucide-react";
+import { X, PenLine, Loader2, Bold, Italic, List, Heading2, Heading3, ListOrdered, Minus, AlertCircle, CheckCircle2 } from "lucide-react";
+import { createBrowserSupabaseClient } from "../../../utils/supabase_browser";
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  onSave?: (title: string, html: string) => void;
+  onSuccess: () => void;
+  containerId: string;
+  /** When set, the modal opens in edit mode with existing content */
+  editDocument?: {
+    id: string;
+    name: string;
+    path: string;
+    content: string;
+  } | null;
 };
 
-export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
+/**
+ * Converts TipTap HTML to simple Markdown.
+ */
+function htmlToMarkdown(html: string): string {
+  let md = html;
+  // Headings
+  md = md.replace(/<h2[^>]*>(.*?)<\/h2>/gi, "## $1\n\n");
+  md = md.replace(/<h3[^>]*>(.*?)<\/h3>/gi, "### $1\n\n");
+  // Bold & italic
+  md = md.replace(/<strong>(.*?)<\/strong>/gi, "**$1**");
+  md = md.replace(/<em>(.*?)<\/em>/gi, "*$1*");
+  // Lists
+  md = md.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (_, inner) => {
+    return inner.replace(/<li[^>]*><p[^>]*>(.*?)<\/p><\/li>/gi, "- $1\n")
+               .replace(/<li[^>]*>(.*?)<\/li>/gi, "- $1\n") + "\n";
+  });
+  md = md.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_, inner) => {
+    let i = 0;
+    return inner.replace(/<li[^>]*><p[^>]*>(.*?)<\/p><\/li>/gi, () => `${++i}. $1\n`)
+               .replace(/<li[^>]*>(.*?)<\/li>/gi, () => `${++i}. $1\n`) + "\n";
+  });
+  // Horizontal rule
+  md = md.replace(/<hr\s*\/?>/gi, "\n---\n\n");
+  // Paragraphs
+  md = md.replace(/<p[^>]*>(.*?)<\/p>/gi, "$1\n\n");
+  // Clean up remaining tags
+  md = md.replace(/<br\s*\/?>/gi, "\n");
+  md = md.replace(/<[^>]+>/g, "");
+  // Clean up whitespace
+  md = md.replace(/\n{3,}/g, "\n\n").trim();
+  return md;
+}
+
+/**
+ * Converts simple Markdown back to HTML for TipTap.
+ */
+function markdownToHtml(md: string): string {
+  let html = md;
+  // Headings (must be before paragraphs)
+  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
+  html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
+  // Bold & italic
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+  // Horizontal rule
+  html = html.replace(/^---$/gm, "<hr>");
+  // Unordered lists
+  html = html.replace(/(^- .+$(\n|$))+/gm, (block) => {
+    const items = block.trim().split("\n").map(line => `<li><p>${line.replace(/^- /, "")}</p></li>`).join("");
+    return `<ul>${items}</ul>`;
+  });
+  // Ordered lists
+  html = html.replace(/(^\d+\. .+$(\n|$))+/gm, (block) => {
+    const items = block.trim().split("\n").map(line => `<li><p>${line.replace(/^\d+\. /, "")}</p></li>`).join("");
+    return `<ol>${items}</ol>`;
+  });
+  // Paragraphs: wrap remaining plain lines
+  html = html.split("\n\n").map(block => {
+    const trimmed = block.trim();
+    if (!trimmed) return "";
+    if (/^<(h[23]|ul|ol|hr|li|p)/.test(trimmed)) return trimmed;
+    return `<p>${trimmed.replace(/\n/g, "<br>")}</p>`;
+  }).join("");
+  return html;
+}
+
+export default function ComposeDocumentModal({ open, onClose, onSuccess, containerId, editDocument }: Props) {
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
+
+  const isEditMode = !!editDocument;
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -39,20 +116,33 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
     },
   });
 
-  // Reset on open
+  // Reset / populate on open
   useEffect(() => {
-    if (open) {
-      setTitle("");
+    if (open && editor) {
       setError("");
       setLoading(false);
-      setWordCount(0);
-      setCharCount(0);
-      editor?.commands.clearContent();
+
+      if (editDocument) {
+        // Edit mode: populate with existing content
+        setTitle(editDocument.name.replace(/\.md$/, ""));
+        const html = markdownToHtml(editDocument.content);
+        editor.commands.setContent(html);
+        const text = editor.getText();
+        setCharCount(text.length);
+        setWordCount(text.trim() ? text.trim().split(/\s+/).length : 0);
+      } else {
+        // Create mode: clear everything
+        setTitle("");
+        setWordCount(0);
+        setCharCount(0);
+        editor.commands.clearContent();
+      }
+
       setTimeout(() => {
         (document.getElementById("doc-title") as HTMLInputElement)?.focus();
       }, 80);
     }
-  }, [open, editor]);
+  }, [open, editor, editDocument]);
 
   // Escape to close
   useEffect(() => {
@@ -83,9 +173,53 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
 
     setLoading(true);
     setError("");
+
     try {
-      await new Promise((res) => setTimeout(res, 700));
-      onSave?.(trimmedTitle, html);
+      // Convert TipTap HTML to Markdown
+      const markdown = htmlToMarkdown(html);
+      const fileName = `${trimmedTitle}.md`;
+
+      // Create a File object from the markdown content
+      const blob = new Blob([markdown], { type: "text/markdown" });
+      const file = new File([blob], fileName, { type: "text/markdown" });
+
+      // Get auth token
+      const supabase = createBrowserSupabaseClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setError("You must be logged in to save documents.");
+        setLoading(false);
+        return;
+      }
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const formData = new FormData();
+      formData.append("id_container", containerId);
+      formData.append("files", file);
+
+      // If editing, use upsert to overwrite
+      if (isEditMode) {
+        formData.append("upsert", "true");
+      }
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/upload-documents`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        setError(data.message || "Failed to save document.");
+        setLoading(false);
+        return;
+      }
+
+      onSuccess();
       onClose();
     } catch {
       setError("An unexpected error occurred. Please try again.");
@@ -168,10 +302,12 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
               </div>
               <div>
                 <h2 className="font-display font-bold text-base leading-none mb-0.5">
-                  Write Document
+                  {isEditMode ? "Edit Document" : "Write Document"}
                 </h2>
                 <p className="text-xs" style={{ color: "var(--muted)" }}>
-                  Compose and save a new document to this container
+                  {isEditMode
+                    ? "Edit and save changes to your document"
+                    : "Compose and save a new document to this container"}
                 </p>
               </div>
             </div>
@@ -203,7 +339,7 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
                   value={title}
                   onChange={(e) => { setTitle(e.target.value); setError(""); }}
                   maxLength={120}
-                  disabled={loading}
+                  disabled={loading || isEditMode}
                   required
                 />
               </div>
@@ -336,7 +472,7 @@ export default function ComposeDocumentModal({ open, onClose, onSave }: Props) {
                   >
                     {loading
                       ? <><Loader2 size={15} className="animate-spin" /> Saving…</>
-                      : <><PenLine size={14} /> Save Document</>}
+                      : <><PenLine size={14} /> {isEditMode ? "Save Changes" : "Save Document"}</>}
                   </button>
                 </div>
               </div>
