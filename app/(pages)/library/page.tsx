@@ -113,7 +113,7 @@ export default function KnowledgeLibraryPage() {
 function ContainerCard({ container }: { container: Container }) {
   return (
     <Link 
-      href={`/library/${encodeURIComponent(container.name)}`}
+      href={`/library/${encodeURIComponent(container.name)}?id=${container.id}`}
       className="feature-card group relative cursor-pointer block transition-transform hover:-translate-y-1" 
       style={{ padding: "1.5rem" }}
     >

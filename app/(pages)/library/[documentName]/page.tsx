@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, Upload, PenLine, Search, FileText, FolderOpen, Loader2, File as FileIcon, Image as ImageIcon } from "lucide-react";
 import ComposeDocumentModal from "./ComposeDocumentModal";
 import UploadFilesModal from "./UploadFilesModal";
-import { fetchContainerByName, fetchDocumentsByContainer } from "./document_actions";
+import { fetchDocumentsByContainer } from "./document_actions";
 
 type Document = {
   id: string;
@@ -42,36 +43,36 @@ function getDocIcon(name: string) {
 export default function ContainerDetail({ params }: { params: Promise<{ documentName: string }> }) {
   const resolvedParams = use(params);
   const containerName = decodeURIComponent(resolvedParams.documentName);
+  const searchParams = useSearchParams();
+  const containerId = searchParams.get("id");
 
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [containerId, setContainerId] = useState<string | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    loadContainerAndDocuments();
-  }, [containerName]);
+    if (containerId) {
+      loadDocuments();
+    } else {
+      setError("Container ID is missing.");
+      setIsLoading(false);
+    }
+  }, [containerId]);
 
-  async function loadContainerAndDocuments() {
+  async function loadDocuments() {
+    if (!containerId) return;
     setIsLoading(true);
     setError("");
 
-    const containerRes = await fetchContainerByName(containerName);
-    if (!containerRes.success || !containerRes.data) {
-      setError(containerRes.message);
-      setIsLoading(false);
-      return;
-    }
-
-    setContainerId(containerRes.data.id);
-
-    const docsRes = await fetchDocumentsByContainer(containerRes.data.id);
+    const docsRes = await fetchDocumentsByContainer(containerId);
     if (docsRes.success) {
       setDocuments(docsRes.data);
+    } else {
+      setError(docsRes.message);
     }
 
     setIsLoading(false);
@@ -333,7 +334,7 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
         <UploadFilesModal
           open={isUploadOpen}
           onClose={() => setIsUploadOpen(false)}
-          onSuccess={() => loadContainerAndDocuments()}
+          onSuccess={() => loadDocuments()}
           containerId={containerId}
         />
       )}
