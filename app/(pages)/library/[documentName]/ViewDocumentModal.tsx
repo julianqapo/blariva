@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   X,
   FileText,
@@ -12,9 +12,9 @@ import {
   Download,
 } from "lucide-react";
 import {
-  getSignedUrl,
+  getFileBase64,
   getTextFileContent,
-  getBinaryFileBase64,
+  getSignedUrl,
 } from "./document_actions";
 import { createBrowserSupabaseClient } from "../../../utils/supabase_browser";
 
@@ -30,17 +30,24 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  onOpenEditor: (doc: { id: string; name: string; path: string; content: string }) => void;
+  onOpenEditor: (doc: {
+    id: string;
+    name: string;
+    path: string;
+    content: string;
+  }) => void;
   document: DocumentRecord | null;
   containerId: string;
+  /** Increment this to force the modal to re-fetch content */
+  refreshKey?: number;
 };
 
-/**
- * Renders simple markdown as styled HTML for display.
- */
 function renderMarkdown(md: string): string {
   let html = md;
-  html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  html = html
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
   html = html.replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2 class="md-h2">$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1 class="md-h1">$1</h1>');
@@ -48,19 +55,30 @@ function renderMarkdown(md: string): string {
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
   html = html.replace(/^---$/gm, '<hr class="md-hr">');
   html = html.replace(/(^- .+$(\n|$))+/gm, (block) => {
-    const items = block.trim().split("\n").map(line => `<li>${line.replace(/^- /, "")}</li>`).join("");
+    const items = block
+      .trim()
+      .split("\n")
+      .map((line) => `<li>${line.replace(/^- /, "")}</li>`)
+      .join("");
     return `<ul class="md-ul">${items}</ul>`;
   });
   html = html.replace(/(^\d+\. .+$(\n|$))+/gm, (block) => {
-    const items = block.trim().split("\n").map(line => `<li>${line.replace(/^\d+\. /, "")}</li>`).join("");
+    const items = block
+      .trim()
+      .split("\n")
+      .map((line) => `<li>${line.replace(/^\d+\. /, "")}</li>`)
+      .join("");
     return `<ol class="md-ol">${items}</ol>`;
   });
-  html = html.split("\n\n").map(block => {
-    const trimmed = block.trim();
-    if (!trimmed) return "";
-    if (/^<(h[123]|ul|ol|hr|li)/.test(trimmed)) return trimmed;
-    return `<p class="md-p">${trimmed.replace(/\n/g, "<br>")}</p>`;
-  }).join("");
+  html = html
+    .split("\n\n")
+    .map((block) => {
+      const trimmed = block.trim();
+      if (!trimmed) return "";
+      if (/^<(h[123]|ul|ol|hr|li)/.test(trimmed)) return trimmed;
+      return `<p class="md-p">${trimmed.replace(/\n/g, "<br>")}</p>`;
+    })
+    .join("");
   return html;
 }
 
@@ -75,11 +93,19 @@ export default function ViewDocumentModal({
   onOpenEditor,
   document: doc,
   containerId,
+  refreshKey = 0,
 }: Props) {
   const [content, setContent] = useState("");
   const [editContent, setEditContent] = useState("");
-  const [signedUrl, setSignedUrl] = useState("");
+  // For PDF: base64 data URL rendered via object tag
+  const [pdfDataUrl, setPdfDataUrl] = useState("");
+  // For Word: HTML rendered by mammoth
   const [wordHtml, setWordHtml] = useState("");
+  // For images: base64 data URL
+  const [imageDataUrl, setImageDataUrl] = useState("");
+  // For download
+  const [downloadUrl, setDownloadUrl] = useState("");
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
@@ -92,22 +118,28 @@ export default function ViewDocumentModal({
   const isImage = ["png", "jpg", "jpeg"].includes(ext);
   const isDocx = ext === "docx";
   const isDoc = ext === "doc";
-  const isWord = isDocx || isDoc;
   const isTextBased = isMarkdown || isTxt;
   const isEditable = isMarkdown || isTxt;
 
-  // Fetch file content on open
+  const resetState = useCallback(() => {
+    setIsEditing(false);
+    setError("");
+    setContent("");
+    setEditContent("");
+    setPdfDataUrl("");
+    setWordHtml("");
+    setImageDataUrl("");
+    setDownloadUrl("");
+  }, []);
+
+  // Fetch file content on open — also re-fetches when refreshKey changes
   useEffect(() => {
     if (open && doc) {
-      setIsEditing(false);
-      setError("");
-      setContent("");
-      setSignedUrl("");
-      setWordHtml("");
+      resetState();
       fetchContent();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, doc]);
+  }, [open, doc?.id, refreshKey]);
 
   async function fetchContent() {
     if (!doc) return;
@@ -116,7 +148,6 @@ export default function ViewDocumentModal({
 
     try {
       if (isTextBased) {
-        // Use server action to get text content
         const result = await getTextFileContent(doc.path);
         if (!result.success) {
           setError(result.message || "Could not load file content.");
@@ -125,18 +156,34 @@ export default function ViewDocumentModal({
         }
         setContent(result.content);
         setEditContent(result.content);
-      } else if (isPdf || isImage) {
-        // Use server action to get a signed URL
-        const result = await getSignedUrl(doc.path);
+      } else if (isPdf) {
+        // Download as base64 and render with <object> data URL
+        const result = await getFileBase64(doc.path);
         if (!result.success) {
-          setError(result.message || "Could not load file.");
+          setError(result.message || "Could not load PDF.");
           setIsLoading(false);
           return;
         }
-        setSignedUrl(result.url);
+        setPdfDataUrl(`data:application/pdf;base64,${result.base64}`);
+        // Also get signed URL for download
+        const urlRes = await getSignedUrl(doc.path);
+        if (urlRes.success) setDownloadUrl(urlRes.url);
+      } else if (isImage) {
+        // Download as base64 and render with <img>
+        const result = await getFileBase64(doc.path);
+        if (!result.success) {
+          setError(result.message || "Could not load image.");
+          setIsLoading(false);
+          return;
+        }
+        const ct = result.contentType || `image/${ext === "jpg" ? "jpeg" : ext}`;
+        setImageDataUrl(`data:${ct};base64,${result.base64}`);
+        // Signed URL for download
+        const urlRes = await getSignedUrl(doc.path);
+        if (urlRes.success) setDownloadUrl(urlRes.url);
       } else if (isDocx) {
-        // Use server action to get base64 binary, then render with mammoth.js client-side
-        const result = await getBinaryFileBase64(doc.path);
+        // Download as base64, convert via mammoth.js
+        const result = await getFileBase64(doc.path);
         if (!result.success) {
           setError(result.message || "Could not load Word document.");
           setIsLoading(false);
@@ -144,46 +191,48 @@ export default function ViewDocumentModal({
         }
 
         try {
-          // Convert base64 to ArrayBuffer
-          const binaryString = atob(result.base64);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
+          // Base64 → ArrayBuffer
+          const binaryStr = atob(result.base64);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
           }
           const arrayBuffer = bytes.buffer;
 
-          // Use mammoth browser build
+          // mammoth.js — handle CJS default vs named export
           const mammoth = await import("mammoth");
-          // mammoth is CommonJS — handle both default and named exports
-          const mammothLib = mammoth.default || mammoth;
-          const mammothResult = await mammothLib.convertToHtml(
+          const lib = mammoth.default || mammoth;
+          const mammothResult = await lib.convertToHtml(
             { arrayBuffer },
             {
-              convertImage: mammothLib.images.imgElement(
-                function (image: { contentType: string; readAsBase64String: () => Promise<string> }) {
-                  return image.readAsBase64String().then(function (imageBuffer: string) {
-                    return { src: "data:" + image.contentType + ";base64," + imageBuffer };
+              convertImage: lib.images.imgElement(function (image: {
+                contentType: string;
+                readAsBase64String: () => Promise<string>;
+              }) {
+                return image
+                  .readAsBase64String()
+                  .then(function (imgBase64: string) {
+                    return {
+                      src: `data:${image.contentType};base64,${imgBase64}`,
+                    };
                   });
-                }
-              ),
+              }),
             }
           );
           setWordHtml(mammothResult.value);
         } catch {
-          setError("Failed to render Word document. You can download it instead.");
+          setError(
+            "Failed to render Word document. You can download it instead."
+          );
         }
 
-        // Also get a signed URL for download
-        const urlResult = await getSignedUrl(doc.path);
-        if (urlResult.success) {
-          setSignedUrl(urlResult.url);
-        }
+        // Signed URL for download
+        const urlRes = await getSignedUrl(doc.path);
+        if (urlRes.success) setDownloadUrl(urlRes.url);
       } else if (isDoc) {
-        // Old .doc format — just get a download URL
-        const result = await getSignedUrl(doc.path);
-        if (result.success) {
-          setSignedUrl(result.url);
-        }
+        // Legacy .doc — download only
+        const urlRes = await getSignedUrl(doc.path);
+        if (urlRes.success) setDownloadUrl(urlRes.url);
       }
     } catch {
       setError("Failed to fetch document.");
@@ -198,7 +247,9 @@ export default function ViewDocumentModal({
 
     try {
       const supabase = createBrowserSupabaseClient();
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
         setError("You must be logged in to save.");
@@ -216,11 +267,14 @@ export default function ViewDocumentModal({
       formData.append("files", file);
       formData.append("upsert", "true");
 
-      const res = await fetch(`${supabaseUrl}/functions/v1/upload-documents`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        body: formData,
-      });
+      const res = await fetch(
+        `${supabaseUrl}/functions/v1/upload-documents`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          body: formData,
+        }
+      );
 
       const data = await res.json();
 
@@ -230,9 +284,10 @@ export default function ViewDocumentModal({
         return;
       }
 
-      // Update local state so the view refreshes immediately
+      // Immediately update local state so content is fresh
       setContent(editContent);
       setIsEditing(false);
+      // Tell parent to refresh the document list
       onSuccess();
     } catch {
       setError("An unexpected error occurred.");
@@ -253,9 +308,10 @@ export default function ViewDocumentModal({
 
   function handleDownload() {
     if (!doc) return;
-    // For text files, create a blob download; for binary files use signed URL
     if (isTextBased && content) {
-      const blob = new Blob([content], { type: isTxt ? "text/plain" : "text/markdown" });
+      const blob = new Blob([content], {
+        type: isTxt ? "text/plain" : "text/markdown",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -264,15 +320,8 @@ export default function ViewDocumentModal({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } else if (signedUrl) {
-      const a = document.createElement("a");
-      a.href = signedUrl;
-      a.download = doc.name;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+    } else if (downloadUrl) {
+      window.open(downloadUrl, "_blank");
     }
   }
 
@@ -289,20 +338,30 @@ export default function ViewDocumentModal({
   // Lock body scroll
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [open]);
 
   if (!open || !doc) return null;
 
-  const hasContent = content || signedUrl || wordHtml;
-  const canDownload = isTextBased ? !!content : !!signedUrl;
+  const hasContent =
+    content || pdfDataUrl || wordHtml || imageDataUrl || downloadUrl;
+  const canDownload =
+    isTextBased ? !!content : !!(downloadUrl || pdfDataUrl || imageDataUrl);
 
   return (
     <>
       <div
         className="fixed inset-0 flex items-center justify-center p-4"
-        style={{ zIndex: 9999, background: "rgba(2, 6, 23, 0.75)", backdropFilter: "blur(6px)" }}
-        onClick={(e) => e.target === e.currentTarget && !isSaving && onClose()}
+        style={{
+          zIndex: 9999,
+          background: "rgba(2, 6, 23, 0.75)",
+          backdropFilter: "blur(6px)",
+        }}
+        onClick={(e) =>
+          e.target === e.currentTarget && !isSaving && onClose()
+        }
       >
         <div
           className="animate-fade-in-up w-full flex flex-col rounded-2xl shadow-2xl overflow-hidden"
@@ -319,7 +378,10 @@ export default function ViewDocumentModal({
             style={{ borderBottom: "1px solid var(--border)" }}
           >
             <div className="flex items-center gap-3 min-w-0">
-              <div className="icon-wrap shrink-0" style={{ width: 36, height: 36, borderRadius: 9 }}>
+              <div
+                className="icon-wrap shrink-0"
+                style={{ width: 36, height: 36, borderRadius: 9 }}
+              >
                 <FileText size={15} className="text-amber-500" />
               </div>
               <div className="min-w-0">
@@ -332,7 +394,6 @@ export default function ViewDocumentModal({
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {/* Edit button for editable text files */}
               {isEditable && !isEditing && !isLoading && (
                 <button
                   onClick={() => {
@@ -348,8 +409,13 @@ export default function ViewDocumentModal({
                     color: "var(--primary)",
                     border: "1px solid rgba(245,158,11,0.2)",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245,158,11,0.18)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245,158,11,0.1)")}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background =
+                      "rgba(245,158,11,0.18)")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = "rgba(245,158,11,0.1)")
+                  }
                 >
                   <PenLine size={12} />
                   Edit
@@ -357,9 +423,15 @@ export default function ViewDocumentModal({
               )}
               {isEditing && isTxt && (
                 <button
-                  onClick={() => { setIsEditing(false); setEditContent(content); }}
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditContent(content);
+                  }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                  style={{ color: "var(--muted)", border: "1px solid var(--border)" }}
+                  style={{
+                    color: "var(--muted)",
+                    border: "1px solid var(--border)",
+                  }}
                   disabled={isSaving}
                 >
                   <Eye size={12} />
@@ -367,7 +439,6 @@ export default function ViewDocumentModal({
                 </button>
               )}
 
-              {/* Download button */}
               {canDownload && !isLoading && (
                 <button
                   onClick={handleDownload}
@@ -377,8 +448,13 @@ export default function ViewDocumentModal({
                     color: "var(--primary)",
                     border: "1px solid rgba(245,158,11,0.2)",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245,158,11,0.18)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245,158,11,0.1)")}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background =
+                      "rgba(245,158,11,0.18)")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = "rgba(245,158,11,0.1)")
+                  }
                 >
                   <Download size={12} />
                   Download
@@ -391,8 +467,12 @@ export default function ViewDocumentModal({
                 aria-label="Close modal"
                 className="p-1.5 rounded-lg transition-colors disabled:opacity-40"
                 style={{ color: "var(--muted)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245,158,11,0.08)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "rgba(245,158,11,0.08)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "transparent")
+                }
               >
                 <X size={18} />
               </button>
@@ -400,11 +480,20 @@ export default function ViewDocumentModal({
           </div>
 
           {/* Body */}
-          <div className="flex-1 min-h-0" style={{ display: "flex", flexDirection: "column" }}>
+          <div
+            className="flex-1 min-h-0"
+            style={{ display: "flex", flexDirection: "column" }}
+          >
             {isLoading ? (
               <div className="flex flex-col items-center justify-center flex-1">
-                <Loader2 size={28} className="animate-spin mb-3 text-amber-500" />
-                <p className="text-sm font-semibold" style={{ color: "var(--muted)" }}>
+                <Loader2
+                  size={28}
+                  className="animate-spin mb-3 text-amber-500"
+                />
+                <p
+                  className="text-sm font-semibold"
+                  style={{ color: "var(--muted)" }}
+                >
                   Loading document...
                 </p>
               </div>
@@ -423,78 +512,99 @@ export default function ViewDocumentModal({
                 </div>
               </div>
             ) : isEditing && isTxt ? (
-              /* TXT edit mode */
               <textarea
                 className="w-full flex-1 px-6 py-5 bg-transparent resize-none outline-none"
                 style={{
                   color: "var(--text)",
                   fontSize: "0.9375rem",
                   lineHeight: "1.75",
-                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                  fontFamily:
+                    "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                 }}
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
                 disabled={isSaving}
               />
             ) : isMarkdown ? (
-              /* Markdown rendered view */
               <div
                 className="px-6 py-5 md-rendered overflow-y-auto flex-1"
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
               />
             ) : isTxt ? (
-              /* Plain text view */
               <pre
                 className="px-6 py-5 whitespace-pre-wrap overflow-y-auto flex-1"
                 style={{
                   color: "var(--text)",
                   fontSize: "0.9375rem",
                   lineHeight: "1.75",
-                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                  fontFamily:
+                    "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                 }}
               >
                 {content}
               </pre>
-            ) : isPdf ? (
-              /* PDF viewer — using signed URL in iframe (works in all browsers) */
-              <iframe
-                src={`${signedUrl}#toolbar=1&navpanes=0`}
+            ) : isPdf && pdfDataUrl ? (
+              <object
+                data={pdfDataUrl}
+                type="application/pdf"
                 className="flex-1 w-full"
                 style={{ border: "none" }}
-                title={doc.name}
-              />
-            ) : isImage ? (
-              /* Image viewer */
+              >
+                <div className="flex flex-col items-center justify-center flex-1 p-6">
+                  <p
+                    className="text-sm mb-3"
+                    style={{ color: "var(--muted)" }}
+                  >
+                    Your browser cannot display this PDF inline.
+                  </p>
+                  <button
+                    onClick={handleDownload}
+                    className="btn-primary flex items-center gap-2 px-5 py-2.5 text-sm"
+                  >
+                    <Download size={14} />
+                    Download {doc.name}
+                  </button>
+                </div>
+              </object>
+            ) : isImage && imageDataUrl ? (
               <div className="flex items-center justify-center flex-1 p-6 overflow-auto">
                 <img
-                  src={signedUrl}
+                  src={imageDataUrl}
                   alt={doc.name}
                   className="max-w-full max-h-full object-contain rounded-lg"
                   style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.2)" }}
                 />
               </div>
             ) : isDocx && wordHtml ? (
-              /* Word .docx rendered via mammoth.js */
               <div
                 className="px-6 py-5 overflow-y-auto flex-1 word-rendered"
                 dangerouslySetInnerHTML={{ __html: wordHtml }}
               />
             ) : isDoc ? (
-              /* Old .doc format — cannot render, show download prompt */
               <div className="flex flex-col items-center justify-center flex-1 px-6">
                 <div
                   className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-                  style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)" }}
+                  style={{
+                    background: "rgba(59,130,246,0.1)",
+                    border: "1px solid rgba(59,130,246,0.2)",
+                  }}
                 >
                   <FileText size={28} className="text-blue-500" />
                 </div>
-                <p className="text-sm font-semibold mb-1" style={{ color: "var(--text)" }}>
+                <p
+                  className="text-sm font-semibold mb-1"
+                  style={{ color: "var(--text)" }}
+                >
                   Word Document (.doc)
                 </p>
-                <p className="text-xs mb-4 text-center" style={{ color: "var(--muted)" }}>
-                  Legacy .doc files cannot be previewed in the browser. Use the Download button to open it in Word.
+                <p
+                  className="text-xs mb-4 text-center"
+                  style={{ color: "var(--muted)" }}
+                >
+                  Legacy .doc files cannot be previewed. Use the Download
+                  button to open it in Word.
                 </p>
-                {signedUrl && (
+                {downloadUrl && (
                   <button
                     onClick={handleDownload}
                     className="btn-primary flex items-center gap-2 px-5 py-2.5 text-sm"
@@ -505,7 +615,6 @@ export default function ViewDocumentModal({
                 )}
               </div>
             ) : (
-              /* Fallback */
               <div className="flex flex-col items-center justify-center flex-1 px-6">
                 <p className="text-sm" style={{ color: "var(--muted)" }}>
                   Preview is not available for this file type.
@@ -521,12 +630,17 @@ export default function ViewDocumentModal({
               style={{ borderTop: "1px solid var(--border)" }}
             >
               {error && (
-                <span className="text-xs text-red-400 font-medium">{error}</span>
+                <span className="text-xs text-red-400 font-medium">
+                  {error}
+                </span>
               )}
               <div className="flex items-center gap-3 ml-auto">
                 <button
                   type="button"
-                  onClick={() => { setIsEditing(false); setEditContent(content); }}
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditContent(content);
+                  }}
                   className="btn-ghost"
                   disabled={isSaving}
                 >
@@ -538,9 +652,15 @@ export default function ViewDocumentModal({
                   className="btn-primary flex items-center justify-center gap-2 min-w-[130px]"
                   disabled={isSaving}
                 >
-                  {isSaving
-                    ? <><Loader2 size={15} className="animate-spin" /> Saving…</>
-                    : <><Save size={14} /> Save Changes</>}
+                  {isSaving ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" /> Saving…
+                    </>
+                  ) : (
+                    <>
+                      <Save size={14} /> Save Changes
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -595,7 +715,6 @@ export default function ViewDocumentModal({
           margin: 1.25rem 0;
         }
 
-        /* Word document rendered styles */
         .word-rendered {
           color: var(--text);
           font-size: 0.9375rem;

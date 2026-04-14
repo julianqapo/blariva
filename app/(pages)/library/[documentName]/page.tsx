@@ -60,6 +60,8 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
   // View document modal
   const [viewDoc, setViewDoc] = useState<Document | null>(null);
   const [isViewOpen, setIsViewOpen] = useState(false);
+  // Incremented after any save to force ViewDocumentModal to re-fetch content
+  const [viewRefreshKey, setViewRefreshKey] = useState(0);
 
   // Edit document (when opening ComposeDocumentModal in edit mode from ViewDocumentModal)
   const [editDocData, setEditDocData] = useState<{
@@ -95,6 +97,12 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
     }
 
     setIsLoading(false);
+  }
+
+  /** Called after any save — refreshes the doc list AND bumps the view key */
+  function handleDocumentSaved() {
+    loadDocuments();
+    setViewRefreshKey((k) => k + 1);
   }
 
   function handleDocumentClick(doc: Document) {
@@ -380,7 +388,7 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
           <ComposeDocumentModal
             open={isComposeOpen}
             onClose={handleCloseCompose}
-            onSuccess={() => loadDocuments()}
+            onSuccess={handleDocumentSaved}
             containerId={containerId}
             editDocument={editDocData}
           />
@@ -388,17 +396,18 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
           <UploadFilesModal
             open={isUploadOpen}
             onClose={() => setIsUploadOpen(false)}
-            onSuccess={() => loadDocuments()}
+            onSuccess={handleDocumentSaved}
             containerId={containerId}
           />
 
           <ViewDocumentModal
             open={isViewOpen}
             onClose={() => { setIsViewOpen(false); setViewDoc(null); }}
-            onSuccess={() => loadDocuments()}
+            onSuccess={handleDocumentSaved}
             onOpenEditor={handleOpenEditor}
             document={viewDoc}
             containerId={containerId}
+            refreshKey={viewRefreshKey}
           />
         </>
       )}
