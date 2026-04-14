@@ -3,7 +3,8 @@
 // ============================================================
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createBrowserSupabaseClient } from '@/app/utils/supabase_browser';
@@ -13,8 +14,10 @@ import {
   Sun, Moon, HelpCircle, LogOut, Menu, X,
 } from 'lucide-react';
 
+
 import { HelpModal } from './help/help-modal';
 import { HELP_CONTENT } from './help/help-content';
+
 
 export interface UserProfile {
   name: string;
@@ -23,11 +26,14 @@ export interface UserProfile {
   initials: string;
 }
 
+
 const STORAGE_KEY = 'blariva-theme';
+
 
 function useLocalTheme() {
   const [theme, setThemeState] = useState<'dark' | 'light'>('dark');
   const [mounted, setMounted] = useState(false);
+
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY) as 'dark' | 'light' | null;
@@ -35,14 +41,28 @@ function useLocalTheme() {
     setMounted(true);
   }, []);
 
+
   const setTheme = (t: 'dark' | 'light') => {
     setThemeState(t);
     localStorage.setItem(STORAGE_KEY, t);
   };
 
+
   const toggle = () => setTheme(theme === 'dark' ? 'light' : 'dark');
   return { theme, toggle, mounted };
 }
+
+
+const PAGE_NAMES: Record<string, string> = {
+  '/dashboard': 'Overview',
+  '/library':   'Knowledge Library',
+  '/chat':      'AI Workspace',
+  '/builder':   'Agent Builder',
+  '/analytics': 'Analytics',
+  '/admin':     'Admin & Roles',
+  '/settings':  'Settings',
+};
+
 
 // ── Nav Item with fixed-width icon column ──
 const NavItem = ({
@@ -87,6 +107,7 @@ const NavItem = ({
       </div>
     </div>
 
+
     {/* Label */}
     <span
       className={`
@@ -98,10 +119,12 @@ const NavItem = ({
       {label}
     </span>
 
+
     {/* Active indicator */}
     {isActive && expanded && (
       <div className="ml-auto mr-3 w-1 h-4 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)] dark:shadow-[0_0_8px_rgba(245,158,11,0.6)] shrink-0" />
     )}
+
 
     {/* Collapsed tooltip */}
     {!expanded && (
@@ -119,6 +142,7 @@ const NavItem = ({
     )}
   </Link>
 );
+
 
 // ── Animated Hamburger / Close icon ──
 const HamburgerIcon = ({ open }: { open: boolean }) => (
@@ -141,6 +165,14 @@ const HamburgerIcon = ({ open }: { open: boolean }) => (
   </div>
 );
 
+
+// ── Helper to check if a pathname matches a nav href (including sub-routes) ──
+function isNavActive(pathname: string, href: string): boolean {
+  if (pathname === href) return true;
+  return pathname.startsWith(href + '/');
+}
+
+
 export function AppShell({
   children,
   user
@@ -152,17 +184,21 @@ export function AppShell({
   const router = useRouter();
   const supabase = createBrowserSupabaseClient();
 
+
   const { theme, toggle, mounted } = useLocalTheme();
   const [isLoaded, setIsLoaded] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopHovered, setDesktopHovered] = useState(false);
   const desktopExpanded = desktopHovered;
 
+
   useEffect(() => {
     setTimeout(() => setIsLoaded(true), 100);
   }, []);
+
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -172,32 +208,27 @@ export function AppShell({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [mobileOpen]);
 
+
   const handleNavClick = useCallback(() => setMobileOpen(false), []);
 
- const PAGE_NAMES: Record<string, string> = {
-  '/dashboard': 'Overview',
-  '/library':   'Knowledge Library',
-  '/chat':      'AI Workspace',
-  '/builder':   'Agent Builder',
-  '/analytics': 'Analytics',
-  '/admin':     'Admin & Roles',
-  '/settings':  'Settings',
-};
 
-// Replace getPageName with getBreadcrumbs
-const getBreadcrumbs = () => {
-  const segments = pathname.split('/').filter(Boolean);
-  return segments.map((segment, i) => {
-    const href = '/' + segments.slice(0, i + 1).join('/');
-    const label = PAGE_NAMES[href] ?? segment.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-    return { href, label };
-  });
-};
+  // Memoize breadcrumbs so they only recompute when pathname changes,
+  // not on every re-render caused by sidebar hover state.
+  const breadcrumbs = useMemo(() => {
+    const segments = pathname.split('/').filter(Boolean);
+    return segments.map((segment, i) => {
+      const href = '/' + segments.slice(0, i + 1).join('/');
+      const label = PAGE_NAMES[href] ?? segment.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      return { href, label };
+    });
+  }, [pathname]);
+
 
   const handleSignOut = async () => {
     setMobileOpen(false);
@@ -205,14 +236,18 @@ const getBreadcrumbs = () => {
     router.push('/member');
   };
 
+
   if (!mounted) return null;
+
 
   const AUTH_ROUTES = ['/admin', '/member', '/verify'];
   const isAuthRoute = AUTH_ROUTES.some((r) => pathname?.startsWith(r));
   if (isAuthRoute) return <>{children}</>;
 
+
   const helpContent =
     HELP_CONTENT[pathname] ?? HELP_CONTENT[`/${pathname.split('/')[1]}`];
+
 
   // ── Shared sidebar internals ──
   const SidebarContent = ({
@@ -252,6 +287,7 @@ const getBreadcrumbs = () => {
         )}
       </div>
 
+
       {/* User identity */}
       {user && (
         <div className="pb-4 shrink-0">
@@ -278,8 +314,10 @@ const getBreadcrumbs = () => {
         </div>
       )}
 
+
       {/* Divider */}
       <div className="mx-3 mb-4 h-px bg-slate-200 dark:bg-white/[0.04] shrink-0" />
+
 
       {/* Nav links — no horizontal padding; the NavItem's fixed icon column handles alignment */}
       <div className="flex-1 flex flex-col gap-1 overflow-y-auto px-0">
@@ -290,22 +328,26 @@ const getBreadcrumbs = () => {
         )}
         {!expanded && <div className="mb-2 h-4" />}
 
-        <NavItem icon={<LayoutDashboard />} label={PAGE_NAMES["/dashboard"]}         href="/dashboard" isActive={pathname === '/dashboard'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<Library />}         label={PAGE_NAMES["/library"]} href="/library"   isActive={pathname === '/library'}   expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<MessageSquare />}   label={PAGE_NAMES["/chat"]}      href="/chat"      isActive={pathname === '/chat'}      expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<Bot />}             label={PAGE_NAMES["/builder"]}     href="/builder"   isActive={pathname === '/builder'}   expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<LineChart />}       label={PAGE_NAMES["/analytics"]}         href="/analytics" isActive={pathname === '/analytics'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+
+        <NavItem icon={<LayoutDashboard />} label={PAGE_NAMES["/dashboard"]}         href="/dashboard" isActive={isNavActive(pathname, '/dashboard')} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<Library />}         label={PAGE_NAMES["/library"]} href="/library"   isActive={isNavActive(pathname, '/library')}   expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<MessageSquare />}   label={PAGE_NAMES["/chat"]}      href="/chat"      isActive={isNavActive(pathname, '/chat')}      expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<Bot />}             label={PAGE_NAMES["/builder"]}     href="/builder"   isActive={isNavActive(pathname, '/builder')}   expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<LineChart />}       label={PAGE_NAMES["/analytics"]}         href="/analytics" isActive={isNavActive(pathname, '/analytics')} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+
 
         <div className="h-px bg-slate-200 dark:bg-white/[0.04] my-4 mx-3" />
+
 
         {expanded && (
           <div className="px-7 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
             Governance
           </div>
         )}
-        <NavItem icon={<Shield />}   label={PAGE_NAMES["/admin"]}    href="/admin"    isActive={pathname === '/admin'}    expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
-        <NavItem icon={<Settings />} label={PAGE_NAMES["/settings"]}      href="/settings" isActive={pathname === '/settings'} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<Shield />}   label={PAGE_NAMES["/admin"]}    href="/admin"    isActive={isNavActive(pathname, '/admin')}    expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
+        <NavItem icon={<Settings />} label={PAGE_NAMES["/settings"]}      href="/settings" isActive={isNavActive(pathname, '/settings')} expanded={expanded} onClick={isMobile ? handleNavClick : undefined} />
       </div>
+
 
       {/* Sign out — same fixed icon column pattern */}
       <div className="border-t border-slate-200 dark:border-white/[0.04] shrink-0">
@@ -349,12 +391,15 @@ const getBreadcrumbs = () => {
     </>
   );
 
+
   return (
     <div className={`${theme === 'dark' ? 'dark' : 'light-override'} h-screen w-full overflow-hidden transition-colors duration-500`}>
       <div className="h-full w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-300 selection:bg-amber-500/30 selection:text-amber-900 dark:selection:text-amber-200 flex relative transition-colors duration-500">
 
+
         {/* Ambient glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-amber-500/10 dark:bg-amber-500/5 blur-[100px] dark:blur-[120px] rounded-full pointer-events-none z-0 transition-all duration-700" />
+
 
         {/* ── DESKTOP SIDEBAR ── */}
         <nav
@@ -374,6 +419,7 @@ const getBreadcrumbs = () => {
           <SidebarContent expanded={desktopExpanded} isMobile={false} />
         </nav>
 
+
         {/* ── MOBILE BACKDROP ── */}
         <div
           aria-hidden="true"
@@ -385,6 +431,7 @@ const getBreadcrumbs = () => {
             ${mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
           `}
         />
+
 
         {/* ── MOBILE DRAWER ── */}
         <nav
@@ -402,12 +449,14 @@ const getBreadcrumbs = () => {
           <SidebarContent expanded={true} isMobile={true} />
         </nav>
 
+
         {/* ── MAIN CONTENT ── */}
         <div className={`
           flex-1 flex flex-col relative z-10 overflow-hidden
           transition-all duration-700 delay-100 ease-out
           ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}
         `}>
+
 
           <header className="h-16 lg:h-20 border-b border-slate-200 dark:border-white/[0.04] bg-white/60 dark:bg-slate-950/30 backdrop-blur-xl flex items-center justify-between px-4 lg:px-8 sticky top-0 z-20 transition-colors duration-500 shrink-0">
             <div className="flex items-center gap-3">
@@ -420,12 +469,14 @@ const getBreadcrumbs = () => {
                 <HamburgerIcon open={mobileOpen} />
               </button>
 
+
               <div className="lg:hidden flex items-center gap-2">
                 <div className="w-6 h-6 rounded-md bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_8px_rgba(245,158,11,0.3)]">
                   <span className="text-white font-bold text-xs">B</span>
                 </div>
                 <span className="text-slate-900 dark:text-slate-100 font-semibold text-base tracking-tight">BlaRiva</span>
               </div>
+
 
               <div className="hidden lg:flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
                 <Link
@@ -434,7 +485,7 @@ const getBreadcrumbs = () => {
                 >
                   BlaRiva OS
                 </Link>
-                {getBreadcrumbs().map(({ href, label }, i, arr) => (
+                {breadcrumbs.map(({ href, label }, i, arr) => (
                   <React.Fragment key={href}>
                     <ChevronRight size={14} className="text-slate-300 dark:text-slate-600 shrink-0" />
                     {i === arr.length - 1 ? (
@@ -454,6 +505,7 @@ const getBreadcrumbs = () => {
               </div>
             </div>
 
+
             <div className="flex items-center gap-2 lg:gap-4 xl:gap-6">
               <div className="relative group hidden sm:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 group-focus-within:text-amber-500 transition-colors" />
@@ -468,7 +520,9 @@ const getBreadcrumbs = () => {
                 </div>
               </div>
 
+
               <div className="h-6 w-px bg-slate-200 dark:bg-white/10" />
+
 
               {helpContent && (
                 <button
@@ -480,12 +534,14 @@ const getBreadcrumbs = () => {
                 </button>
               )}
 
+
               <button
                 onClick={toggle}
                 className="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
               >
                 {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
               </button>
+
 
               <button className="relative w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
                 <Bell size={18} />
@@ -494,11 +550,13 @@ const getBreadcrumbs = () => {
             </div>
           </header>
 
+
           <main className="flex-1 overflow-y-auto overflow-x-hidden">
             {children}
           </main>
         </div>
       </div>
+
 
       <HelpModal
         isOpen={isHelpOpen}
