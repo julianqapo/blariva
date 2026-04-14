@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   X,
   FileText,
@@ -35,28 +35,21 @@ type Props = {
  */
 function renderMarkdown(md: string): string {
   let html = md;
-  // Escape HTML entities
   html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  // Headings
   html = html.replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2 class="md-h2">$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1 class="md-h1">$1</h1>');
-  // Bold & italic
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
-  // Horizontal rule
   html = html.replace(/^---$/gm, '<hr class="md-hr">');
-  // Unordered lists
   html = html.replace(/(^- .+$(\n|$))+/gm, (block) => {
     const items = block.trim().split("\n").map(line => `<li>${line.replace(/^- /, "")}</li>`).join("");
     return `<ul class="md-ul">${items}</ul>`;
   });
-  // Ordered lists
   html = html.replace(/(^\d+\. .+$(\n|$))+/gm, (block) => {
     const items = block.trim().split("\n").map(line => `<li>${line.replace(/^\d+\. /, "")}</li>`).join("");
     return `<ol class="md-ol">${items}</ol>`;
   });
-  // Paragraphs
   html = html.split("\n\n").map(block => {
     const trimmed = block.trim();
     if (!trimmed) return "";
@@ -80,20 +73,35 @@ export default function ViewDocumentModal({
 }: Props) {
   const [content, setContent] = useState("");
   const [editContent, setEditContent] = useState("");
-  const [signedUrl, setSignedUrl] = useState("");
+  const [blobUrl, setBlobUrl] = useState("");
+  const [downloadUrl, setDownloadUrl] = useState("");
+  const [wordHtml, setWordHtml] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  const blobUrlRef = useRef("");
 
   const ext = getFileExt(doc?.name || "");
   const isMarkdown = ext === "md" || ext === "markdown";
   const isTxt = ext === "txt";
   const isPdf = ext === "pdf";
   const isImage = ["png", "jpg", "jpeg"].includes(ext);
-  const isWord = ext === "doc" || ext === "docx";
+  const isDocx = ext === "docx";
+  const isDoc = ext === "doc";
+  const isWord = isDocx || isDoc;
   const isTextBased = isMarkdown || isTxt;
   const isEditable = isMarkdown || isTxt;
+
+  // Clean up blob URL on unmount/re-fetch
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = "";
+      }
+    };
+  }, []);
 
   // Fetch file content on open
   useEffect(() => {
@@ -101,7 +109,16 @@ export default function ViewDocumentModal({
       setIsEditing(false);
       setError("");
       setContent("");
-      setSignedUrl("");
+      setBlobUrl("");
+      setDownloadUrl("");
+      setWordHtml("");
+
+      // Revoke old blob URL
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = "";
+      }
+
       fetchContent();
     }
   }, [open, doc]);
@@ -130,18 +147,49 @@ export default function ViewDocumentModal({
         setContent(text);
         setEditContent(text);
       } else {
-        // For binary files (PDF, images, Word), get a signed URL
-        const { data, error: urlError } = await supabase.storage
+        // For binary files, download the blob directly
+        const { data, error: dlError } = await supabase.storage
           .from("document")
-          .createSignedUrl(doc.path, 3600); // 1 hour expiry
+          .download(doc.path);
 
-        if (urlError || !data?.signedUrl) {
-          setError("Could not generate file URL.");
+        if (dlError || !data) {
+          setError("Could not load file.");
           setIsLoading(false);
           return;
         }
 
-        setSignedUrl(data.signedUrl);
+        // Create a download URL from the blob
+        const url = URL.createObjectURL(data);
+        blobUrlRef.current = url;
+        setDownloadUrl(url);
+
+        if (isPdf) {
+          // For PDFs, use the blob URL directly in the iframe
+          setBlobUrl(url);
+        } else if (isImage) {
+          // For images, use the blob URL directly
+          setBlobUrl(url);
+        } else if (isDocx) {
+          // For .docx, use mammoth.js to convert to HTML
+          try {
+            const mammoth = await import("mammoth");
+            const arrayBuffer = await data.arrayBuffer();
+            const result = await mammoth.default.convertToHtml(
+              { arrayBuffer },
+              {
+                convertImage: mammoth.default.images.imgElement(function (image: { contentType: string; readAsBase64String: () => Promise<string> }) {
+                  return image.readAsBase64String().then(function (imageBuffer: string) {
+                    return { src: "data:" + image.contentType + ";base64," + imageBuffer };
+                  });
+                }),
+              }
+            );
+            setWordHtml(result.value);
+          } catch {
+            setError("Failed to render Word document. You can download it instead.");
+          }
+        }
+        // For .doc (old format), we just show a download prompt
       }
     } catch {
       setError("Failed to fetch document.");
@@ -198,7 +246,6 @@ export default function ViewDocumentModal({
 
   function handleEditMarkdown() {
     if (!doc) return;
-    // Close this modal and open the ComposeDocumentModal in edit mode
     onOpenEditor({
       id: doc.id,
       name: doc.name,
@@ -206,6 +253,16 @@ export default function ViewDocumentModal({
       content,
     });
     onClose();
+  }
+
+  function handleDownload() {
+    if (!downloadUrl || !doc) return;
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = doc.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
   // Escape to close
@@ -225,6 +282,8 @@ export default function ViewDocumentModal({
   }, [open]);
 
   if (!open || !doc) return null;
+
+  const hasContent = content || blobUrl || wordHtml;
 
   return (
     <>
@@ -261,7 +320,7 @@ export default function ViewDocumentModal({
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {/* Edit button for editable files */}
+              {/* Edit button for editable text files */}
               {isEditable && !isEditing && !isLoading && (
                 <button
                   onClick={() => {
@@ -297,25 +356,21 @@ export default function ViewDocumentModal({
               )}
 
               {/* Download button for binary files */}
-              {(isPdf || isImage || isWord) && signedUrl && !isLoading && (
-                <a
-                  href={signedUrl}
-                  download={doc.name}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              {(isPdf || isImage || isWord) && downloadUrl && !isLoading && (
+                <button
+                  onClick={handleDownload}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
                   style={{
                     background: "rgba(245,158,11,0.1)",
                     color: "var(--primary)",
                     border: "1px solid rgba(245,158,11,0.2)",
-                    textDecoration: "none",
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245,158,11,0.18)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245,158,11,0.1)")}
                 >
                   <Download size={12} />
                   Download
-                </a>
+                </button>
               )}
 
               <button
@@ -333,16 +388,16 @@ export default function ViewDocumentModal({
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="flex-1 min-h-0" style={{ display: "flex", flexDirection: "column" }}>
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-full">
+              <div className="flex flex-col items-center justify-center flex-1">
                 <Loader2 size={28} className="animate-spin mb-3 text-amber-500" />
                 <p className="text-sm font-semibold" style={{ color: "var(--muted)" }}>
                   Loading document...
                 </p>
               </div>
-            ) : error && !content && !signedUrl ? (
-              <div className="flex flex-col items-center justify-center h-full px-6">
+            ) : error && !hasContent ? (
+              <div className="flex flex-col items-center justify-center flex-1 px-6">
                 <div
                   className="flex items-start gap-2 p-4 rounded-xl text-sm font-medium"
                   style={{
@@ -358,7 +413,7 @@ export default function ViewDocumentModal({
             ) : isEditing && isTxt ? (
               /* TXT edit mode */
               <textarea
-                className="w-full h-full px-6 py-5 bg-transparent resize-none outline-none"
+                className="w-full flex-1 px-6 py-5 bg-transparent resize-none outline-none"
                 style={{
                   color: "var(--text)",
                   fontSize: "0.9375rem",
@@ -372,13 +427,13 @@ export default function ViewDocumentModal({
             ) : isMarkdown ? (
               /* Markdown rendered view */
               <div
-                className="px-6 py-5 md-rendered"
+                className="px-6 py-5 md-rendered overflow-y-auto flex-1"
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
               />
             ) : isTxt ? (
               /* Plain text view */
               <pre
-                className="px-6 py-5 whitespace-pre-wrap"
+                className="px-6 py-5 whitespace-pre-wrap overflow-y-auto flex-1"
                 style={{
                   color: "var(--text)",
                   fontSize: "0.9375rem",
@@ -389,26 +444,32 @@ export default function ViewDocumentModal({
                 {content}
               </pre>
             ) : isPdf ? (
-              /* PDF viewer */
+              /* PDF viewer — using blob URL in iframe */
               <iframe
-                src={signedUrl}
-                className="w-full h-full"
-                style={{ border: "none", minHeight: "100%" }}
+                src={blobUrl}
+                className="flex-1 w-full"
+                style={{ border: "none" }}
                 title={doc.name}
               />
             ) : isImage ? (
               /* Image viewer */
-              <div className="flex items-center justify-center h-full p-6">
+              <div className="flex items-center justify-center flex-1 p-6 overflow-auto">
                 <img
-                  src={signedUrl}
+                  src={blobUrl}
                   alt={doc.name}
                   className="max-w-full max-h-full object-contain rounded-lg"
                   style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.2)" }}
                 />
               </div>
-            ) : isWord ? (
-              /* Word document — no inline preview, show download prompt */
-              <div className="flex flex-col items-center justify-center h-full px-6">
+            ) : isDocx && wordHtml ? (
+              /* Word .docx rendered via mammoth.js */
+              <div
+                className="px-6 py-5 overflow-y-auto flex-1 word-rendered"
+                dangerouslySetInnerHTML={{ __html: wordHtml }}
+              />
+            ) : isDoc ? (
+              /* Old .doc format — cannot render, show download prompt */
+              <div className="flex flex-col items-center justify-center flex-1 px-6">
                 <div
                   className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
                   style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)" }}
@@ -416,26 +477,22 @@ export default function ViewDocumentModal({
                   <FileText size={28} className="text-blue-500" />
                 </div>
                 <p className="text-sm font-semibold mb-1" style={{ color: "var(--text)" }}>
-                  Word Document
+                  Word Document (.doc)
                 </p>
-                <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
-                  Word documents cannot be previewed in the browser. Use the Download button above to open it.
+                <p className="text-xs mb-4 text-center" style={{ color: "var(--muted)" }}>
+                  Legacy .doc files cannot be previewed in the browser. Use the Download button to open it in Word.
                 </p>
-                <a
-                  href={signedUrl}
-                  download={doc.name}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-primary flex items-center gap-2 px-5 py-2.5 text-sm no-underline"
-                  style={{ textDecoration: "none" }}
+                <button
+                  onClick={handleDownload}
+                  className="btn-primary flex items-center gap-2 px-5 py-2.5 text-sm"
                 >
                   <Download size={14} />
                   Download {doc.name}
-                </a>
+                </button>
               </div>
             ) : (
               /* Fallback */
-              <div className="flex flex-col items-center justify-center h-full px-6">
+              <div className="flex flex-col items-center justify-center flex-1 px-6">
                 <p className="text-sm" style={{ color: "var(--muted)" }}>
                   Preview is not available for this file type.
                 </p>
@@ -522,6 +579,68 @@ export default function ViewDocumentModal({
           border: none;
           border-top: 1px solid var(--border);
           margin: 1.25rem 0;
+        }
+
+        /* Word document rendered styles */
+        .word-rendered {
+          color: var(--text);
+          font-size: 0.9375rem;
+          line-height: 1.75;
+        }
+        .word-rendered h1 {
+          font-size: 1.5rem;
+          font-weight: 800;
+          margin: 0 0 0.75rem;
+          color: var(--text);
+        }
+        .word-rendered h2 {
+          font-size: 1.3rem;
+          font-weight: 800;
+          margin: 1.25rem 0 0.5rem;
+          color: var(--text);
+        }
+        .word-rendered h3 {
+          font-size: 1.05rem;
+          font-weight: 700;
+          margin: 1rem 0 0.4rem;
+          color: var(--text);
+        }
+        .word-rendered p {
+          margin-bottom: 0.75rem;
+        }
+        .word-rendered p:last-child { margin-bottom: 0; }
+        .word-rendered strong { font-weight: 700; }
+        .word-rendered em { font-style: italic; }
+        .word-rendered ul {
+          list-style: disc;
+          padding-left: 1.4rem;
+          margin-bottom: 0.75rem;
+        }
+        .word-rendered ol {
+          list-style: decimal;
+          padding-left: 1.4rem;
+          margin-bottom: 0.75rem;
+        }
+        .word-rendered li { margin-bottom: 0.2rem; }
+        .word-rendered table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 1rem;
+        }
+        .word-rendered th, .word-rendered td {
+          border: 1px solid var(--border);
+          padding: 0.5rem 0.75rem;
+          text-align: left;
+        }
+        .word-rendered th {
+          background: var(--bg);
+          font-weight: 700;
+        }
+        .word-rendered img {
+          max-width: 100%;
+          height: auto;
+          border-radius: 8px;
+          margin: 0.75rem 0;
         }
       `}</style>
     </>
