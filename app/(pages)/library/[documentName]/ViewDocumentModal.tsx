@@ -9,6 +9,7 @@ import {
   PenLine,
   Save,
   Eye,
+  Download,
 } from "lucide-react";
 import { createBrowserSupabaseClient } from "../../../utils/supabase_browser";
 
@@ -65,6 +66,10 @@ function renderMarkdown(md: string): string {
   return html;
 }
 
+function getFileExt(name: string): string {
+  return name.split(".").pop()?.toLowerCase() || "";
+}
+
 export default function ViewDocumentModal({
   open,
   onClose,
@@ -75,14 +80,19 @@ export default function ViewDocumentModal({
 }: Props) {
   const [content, setContent] = useState("");
   const [editContent, setEditContent] = useState("");
+  const [signedUrl, setSignedUrl] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [isEditing, setIsEditing] = useState(false);
 
-  const ext = doc?.name.split(".").pop()?.toLowerCase() || "";
+  const ext = getFileExt(doc?.name || "");
   const isMarkdown = ext === "md" || ext === "markdown";
   const isTxt = ext === "txt";
+  const isPdf = ext === "pdf";
+  const isImage = ["png", "jpg", "jpeg"].includes(ext);
+  const isWord = ext === "doc" || ext === "docx";
+  const isTextBased = isMarkdown || isTxt;
   const isEditable = isMarkdown || isTxt;
 
   // Fetch file content on open
@@ -90,6 +100,8 @@ export default function ViewDocumentModal({
     if (open && doc) {
       setIsEditing(false);
       setError("");
+      setContent("");
+      setSignedUrl("");
       fetchContent();
     }
   }, [open, doc]);
@@ -101,19 +113,36 @@ export default function ViewDocumentModal({
 
     try {
       const supabase = createBrowserSupabaseClient();
-      const { data, error: dlError } = await supabase.storage
-        .from("document")
-        .download(doc.path);
 
-      if (dlError || !data) {
-        setError("Could not load file content.");
-        setIsLoading(false);
-        return;
+      if (isTextBased) {
+        // For text-based files, download and read as text
+        const { data, error: dlError } = await supabase.storage
+          .from("document")
+          .download(doc.path);
+
+        if (dlError || !data) {
+          setError("Could not load file content.");
+          setIsLoading(false);
+          return;
+        }
+
+        const text = await data.text();
+        setContent(text);
+        setEditContent(text);
+      } else {
+        // For binary files (PDF, images, Word), get a signed URL
+        const { data, error: urlError } = await supabase.storage
+          .from("document")
+          .createSignedUrl(doc.path, 3600); // 1 hour expiry
+
+        if (urlError || !data?.signedUrl) {
+          setError("Could not generate file URL.");
+          setIsLoading(false);
+          return;
+        }
+
+        setSignedUrl(data.signedUrl);
       }
-
-      const text = await data.text();
-      setContent(text);
-      setEditContent(text);
     } catch {
       setError("Failed to fetch document.");
     }
@@ -267,6 +296,28 @@ export default function ViewDocumentModal({
                 </button>
               )}
 
+              {/* Download button for binary files */}
+              {(isPdf || isImage || isWord) && signedUrl && !isLoading && (
+                <a
+                  href={signedUrl}
+                  download={doc.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                  style={{
+                    background: "rgba(245,158,11,0.1)",
+                    color: "var(--primary)",
+                    border: "1px solid rgba(245,158,11,0.2)",
+                    textDecoration: "none",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245,158,11,0.18)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245,158,11,0.1)")}
+                >
+                  <Download size={12} />
+                  Download
+                </a>
+              )}
+
               <button
                 onClick={() => !isSaving && onClose()}
                 disabled={isSaving}
@@ -290,7 +341,7 @@ export default function ViewDocumentModal({
                   Loading document...
                 </p>
               </div>
-            ) : error && !content ? (
+            ) : error && !content && !signedUrl ? (
               <div className="flex flex-col items-center justify-center h-full px-6">
                 <div
                   className="flex items-start gap-2 p-4 rounded-xl text-sm font-medium"
@@ -324,7 +375,7 @@ export default function ViewDocumentModal({
                 className="px-6 py-5 md-rendered"
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
               />
-            ) : (
+            ) : isTxt ? (
               /* Plain text view */
               <pre
                 className="px-6 py-5 whitespace-pre-wrap"
@@ -332,13 +383,63 @@ export default function ViewDocumentModal({
                   color: "var(--text)",
                   fontSize: "0.9375rem",
                   lineHeight: "1.75",
-                  fontFamily: isTxt
-                    ? "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-                    : "inherit",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                 }}
               >
                 {content}
               </pre>
+            ) : isPdf ? (
+              /* PDF viewer */
+              <iframe
+                src={signedUrl}
+                className="w-full h-full"
+                style={{ border: "none", minHeight: "100%" }}
+                title={doc.name}
+              />
+            ) : isImage ? (
+              /* Image viewer */
+              <div className="flex items-center justify-center h-full p-6">
+                <img
+                  src={signedUrl}
+                  alt={doc.name}
+                  className="max-w-full max-h-full object-contain rounded-lg"
+                  style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.2)" }}
+                />
+              </div>
+            ) : isWord ? (
+              /* Word document — no inline preview, show download prompt */
+              <div className="flex flex-col items-center justify-center h-full px-6">
+                <div
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                  style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)" }}
+                >
+                  <FileText size={28} className="text-blue-500" />
+                </div>
+                <p className="text-sm font-semibold mb-1" style={{ color: "var(--text)" }}>
+                  Word Document
+                </p>
+                <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+                  Word documents cannot be previewed in the browser. Use the Download button above to open it.
+                </p>
+                <a
+                  href={signedUrl}
+                  download={doc.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary flex items-center gap-2 px-5 py-2.5 text-sm no-underline"
+                  style={{ textDecoration: "none" }}
+                >
+                  <Download size={14} />
+                  Download {doc.name}
+                </a>
+              </div>
+            ) : (
+              /* Fallback */
+              <div className="flex flex-col items-center justify-center h-full px-6">
+                <p className="text-sm" style={{ color: "var(--muted)" }}>
+                  Preview is not available for this file type.
+                </p>
+              </div>
             )}
           </div>
 

@@ -44,7 +44,7 @@ function getDocIcon(name: string) {
 
 function isViewable(name: string): boolean {
   const ext = name.split(".").pop()?.toLowerCase() || "";
-  return ["md", "markdown", "txt"].includes(ext);
+  return ["md", "markdown", "txt", "pdf", "png", "jpg", "jpeg", "doc", "docx"].includes(ext);
 }
 
 export default function ContainerDetail({ params }: { params: Promise<{ documentName: string }> }) {
