@@ -87,6 +87,61 @@ function markdownToHtml(md: string): string {
   return html;
 }
 
+/* ─── Toolbar components defined OUTSIDE the main component ─── */
+/* Prevents React from re-mounting on every render, and uses onMouseDown
+   with preventDefault so clicking a toolbar button doesn't steal focus
+   from TipTap — this is what makes single-click formatting work. */
+
+function ToolbarButton({
+  onClick,
+  active = false,
+  disabled = false,
+  title: tip,
+  children,
+}: {
+  onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={tip}
+      onMouseDown={(e) => {
+        e.preventDefault(); // prevent editor blur
+        onClick();
+      }}
+      disabled={disabled}
+      className="w-8 h-8 flex items-center justify-center rounded-lg transition-all disabled:opacity-30"
+      style={{
+        background: active ? "rgba(245,158,11,0.15)" : "transparent",
+        color: active ? "var(--primary)" : "var(--muted)",
+        border: active ? "1px solid rgba(245,158,11,0.3)" : "1px solid transparent",
+      }}
+      onMouseEnter={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = "rgba(245,158,11,0.08)";
+          e.currentTarget.style.color = "var(--primary)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!active) {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--muted)";
+        }
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ToolbarDivider() {
+  return <div className="w-px h-5 mx-1 shrink-0" style={{ background: "var(--border)" }} />;
+}
+
 export default function ComposeDocumentModal({ open, onClose, onSuccess, containerId, editDocument }: Props) {
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
@@ -239,51 +294,6 @@ export default function ComposeDocumentModal({ open, onClose, onSuccess, contain
 
   if (!open) return null;
 
-  const ToolbarButton = ({
-    onClick,
-    active = false,
-    disabled = false,
-    title: tip,
-    children,
-  }: {
-    onClick: () => void;
-    active?: boolean;
-    disabled?: boolean;
-    title: string;
-    children: React.ReactNode;
-  }) => (
-    <button
-      type="button"
-      title={tip}
-      onClick={onClick}
-      disabled={disabled}
-      className="w-8 h-8 flex items-center justify-center rounded-lg transition-all disabled:opacity-30"
-      style={{
-        background: active ? "rgba(245,158,11,0.15)" : "transparent",
-        color: active ? "var(--primary)" : "var(--muted)",
-        border: active ? "1px solid rgba(245,158,11,0.3)" : "1px solid transparent",
-      }}
-      onMouseEnter={(e) => {
-        if (!active) {
-          e.currentTarget.style.background = "rgba(245,158,11,0.08)";
-          e.currentTarget.style.color = "var(--primary)";
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!active) {
-          e.currentTarget.style.background = "transparent";
-          e.currentTarget.style.color = "var(--muted)";
-        }
-      }}
-    >
-      {children}
-    </button>
-  );
-
-  const Divider = () => (
-    <div className="w-px h-5 mx-1 shrink-0" style={{ background: "var(--border)" }} />
-  );
-
   return (
     <>
       <div
@@ -374,7 +384,7 @@ export default function ComposeDocumentModal({ open, onClose, onSuccess, contain
                   <Heading3 size={15} />
                 </ToolbarButton>
 
-                <Divider />
+                <ToolbarDivider />
 
                 <ToolbarButton
                   title="Bold"
@@ -392,7 +402,7 @@ export default function ComposeDocumentModal({ open, onClose, onSuccess, contain
                   <Italic size={15} />
                 </ToolbarButton>
 
-                <Divider />
+                <ToolbarDivider />
 
                 <ToolbarButton
                   title="Bullet list"
@@ -410,7 +420,7 @@ export default function ComposeDocumentModal({ open, onClose, onSuccess, contain
                   <ListOrdered size={15} />
                 </ToolbarButton>
 
-                <Divider />
+                <ToolbarDivider />
 
                 <ToolbarButton
                   title="Divider line"

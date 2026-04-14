@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   Plus, Upload, PenLine, Search, FileText, FolderOpen,
   Loader2, File as FileIcon, Image as ImageIcon,
-  ArrowUp, ArrowDown,
+  ArrowUp, ArrowDown, RefreshCw,
 } from "lucide-react";
 import ComposeDocumentModal from "./ComposeDocumentModal";
 import UploadFilesModal from "./UploadFilesModal";
@@ -144,6 +144,7 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
 
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
 
   // Sort state
@@ -174,8 +175,23 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
     setIsLoading(false);
   }
 
+  async function handleRefresh() {
+    if (!containerId || isRefreshing) return;
+    setIsRefreshing(true);
+    setError("");
+
+    const docsRes = await fetchDocumentsByContainer(containerId);
+    if (docsRes.success) {
+      setDocuments(docsRes.data);
+    } else {
+      setError(docsRes.message);
+    }
+
+    setIsRefreshing(false);
+  }
+
   function handleDocumentSaved() {
-    loadDocuments();
+    handleRefresh();
     setViewRefreshKey((k) => k + 1);
   }
 
@@ -266,6 +282,24 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
               {documents.length} Document{documents.length !== 1 ? "s" : ""}
             </span>
           </div>
+
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title="Refresh documents"
+            className="w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 disabled:opacity-50"
+            style={{ color: "var(--muted)" }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(245,158,11,0.08)";
+              e.currentTarget.style.color = "var(--primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = "var(--muted)";
+            }}
+          >
+            <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
+          </button>
 
           <div className="h-4 w-px bg-slate-200 dark:bg-white/10 hidden sm:block" />
 
