@@ -1,32 +1,45 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, BookOpen, Loader2, AlertCircle } from "lucide-react";
+import { X, BookOpen, Loader2, AlertCircle, PenLine } from "lucide-react";
 
-import { createContainer } from "./container_actions"; 
+import { createContainer, updateContainer } from "./container_actions"; 
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  onSuccess: () => void; 
+  onSuccess: () => void;
+  /** When set, the modal opens in edit mode with existing values */
+  editContainer?: {
+    id: string;
+    name: string;
+    description: string;
+  } | null;
 };
 
-export default function CreateContainerModal({ open, onClose, onSuccess }: Props) {
+export default function CreateContainerModal({ open, onClose, onSuccess, editContainer }: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const isEditMode = !!editContainer;
+
   useEffect(() => {
     if (open) {
-      setName("");
-      setDescription("");
+      if (editContainer) {
+        setName(editContainer.name);
+        setDescription(editContainer.description);
+      } else {
+        setName("");
+        setDescription("");
+      }
       setError("");
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 80);
     }
-  }, [open]);
+  }, [open, editContainer]);
 
   useEffect(() => {
     if (!open) return;
@@ -42,8 +55,6 @@ export default function CreateContainerModal({ open, onClose, onSuccess }: Props
     const trimmedName = name.trim();
     const trimmedDesc = description.trim();
 
-    // Now if they type spaces and bypass the native HTML required, 
-    // this custom error will trigger perfectly!
     if (!trimmedName) { 
       setError("Container name is required."); 
       return; 
@@ -57,16 +68,26 @@ export default function CreateContainerModal({ open, onClose, onSuccess }: Props
     setLoading(true);
 
     try {
-      const response = await createContainer(trimmedName, trimmedDesc);
+      if (isEditMode && editContainer) {
+        const response = await updateContainer(editContainer.id, trimmedName, trimmedDesc);
 
-      if (!response.success) {
-        setError(response.message || "An error occurred while creating the container.");
-        setLoading(false); 
+        if (!response.success) {
+          setError(response.message || "An error occurred while updating the container.");
+          setLoading(false);
+        } else {
+          onSuccess();
+        }
       } else {
-        onSuccess();
-      }
+        const response = await createContainer(trimmedName, trimmedDesc);
 
-    } catch (err) {
+        if (!response.success) {
+          setError(response.message || "An error occurred while creating the container.");
+          setLoading(false); 
+        } else {
+          onSuccess();
+        }
+      }
+    } catch {
       setError("An unexpected network error occurred. Please try again.");
       setLoading(false);
     }
@@ -87,12 +108,20 @@ export default function CreateContainerModal({ open, onClose, onSuccess }: Props
         <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
           <div className="flex items-center gap-3">
             <div className="icon-wrap" style={{ width: 36, height: 36, borderRadius: 9 }}>
-              <BookOpen size={16} className="text-amber-500" />
+              {isEditMode
+                ? <PenLine size={16} className="text-amber-500" />
+                : <BookOpen size={16} className="text-amber-500" />
+              }
             </div>
             <div>
-              <h2 className="font-display font-bold text-base leading-none mb-0.5">New Container</h2>
+              <h2 className="font-display font-bold text-base leading-none mb-0.5">
+                {isEditMode ? "Edit Container" : "New Container"}
+              </h2>
               <p className="text-xs" style={{ color: "var(--muted)" }}>
-                Organise files into a secure workspace
+                {isEditMode
+                  ? "Update the name or description"
+                  : "Organise files into a secure workspace"
+                }
               </p>
             </div>
           </div>
@@ -146,15 +175,17 @@ export default function CreateContainerModal({ open, onClose, onSuccess }: Props
             />
           </div>
 
-          <div
-            className="rounded-xl px-4 py-3"
-            style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)" }}
-          >
-            <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
-              Containers group related documents together. Members with access
-              can search and query all files within a container.
-            </p>
-          </div>
+          {!isEditMode && (
+            <div
+              className="rounded-xl px-4 py-3"
+              style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)" }}
+            >
+              <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+                Containers group related documents together. Members with access
+                can search and query all files within a container.
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-3 pt-1">
             <button type="button" onClick={onClose} className="btn-ghost" disabled={loading}>
@@ -163,12 +194,12 @@ export default function CreateContainerModal({ open, onClose, onSuccess }: Props
             <button
               type="submit"
               className="btn-primary flex items-center justify-center gap-2 min-w-[150px]"
-              disabled={loading} /* <-- FIX: Removed !name.trim() constraint */
+              disabled={loading}
             >
               {loading ? (
-                <><Loader2 size={15} className="animate-spin" /> Creating…</>
+                <><Loader2 size={15} className="animate-spin" /> {isEditMode ? "Saving…" : "Creating…"}</>
               ) : (
-                "Create Container"
+                isEditMode ? "Save Changes" : "Create Container"
               )}
             </button>
           </div>
