@@ -8,7 +8,7 @@ import { createServerSupabaseClient } from "../../../utils/supabase_client";
 /**
  * Verifies the current user is authenticated and belongs to the same
  * company as the document at the given storage path.
- * Storage paths are: {id_company}/{id_container}/{filename}
+ * Storage paths are: {id_company}/{id_container}/{document_id}
  */
 async function verifyAccess(supabase: ReturnType<typeof createServerSupabaseClient>, path: string) {
   const {

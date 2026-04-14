@@ -266,6 +266,7 @@ export default function ViewDocumentModal({
       formData.append("id_container", containerId);
       formData.append("files", file);
       formData.append("upsert", "true");
+      formData.append("existing_doc_id", doc.id);
 
       const res = await fetch(
         `${supabaseUrl}/functions/v1/upload-documents`,

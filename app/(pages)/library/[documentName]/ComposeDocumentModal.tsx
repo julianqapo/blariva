@@ -262,9 +262,10 @@ export default function ComposeDocumentModal({ open, onClose, onSuccess, contain
       formData.append("id_container", containerId);
       formData.append("files", file);
 
-      // If editing, use upsert to overwrite
-      if (isEditMode) {
+      // If editing, use upsert to overwrite using existing document ID
+      if (isEditMode && editDocument) {
         formData.append("upsert", "true");
+        formData.append("existing_doc_id", editDocument.id);
       }
 
       const res = await fetch(`${supabaseUrl}/functions/v1/upload-documents`, {
