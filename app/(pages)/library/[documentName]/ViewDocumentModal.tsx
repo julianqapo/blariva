@@ -15,7 +15,9 @@ import {
   getFileBase64,
   getTextFileContent,
   getSignedUrl,
+  appendChangeSnippets,
 } from "./document_actions";
+import { useChangeTracker } from "./useChangeTracker";
 import { createBrowserSupabaseClient } from "../../../utils/supabase_browser";
 
 type DocumentRecord = {
@@ -111,6 +113,9 @@ export default function ViewDocumentModal({
   const [error, setError] = useState("");
   const [isEditing, setIsEditing] = useState(false);
 
+  // Change tracker for Wiki LLM — captures context around edits
+  const tracker = useChangeTracker();
+
   const ext = getFileExt(doc?.name || "");
   const isMarkdown = ext === "md" || ext === "markdown";
   const isTxt = ext === "txt";
@@ -156,6 +161,7 @@ export default function ViewDocumentModal({
         }
         setContent(result.content);
         setEditContent(result.content);
+        tracker.init(result.content);
       } else if (isPdf) {
         // Download as base64 and render with <object> data URL
         const result = await getFileBase64(doc.path);
@@ -285,8 +291,15 @@ export default function ViewDocumentModal({
         return;
       }
 
+      // Flush change snippets to storage and set status to pending
+      const snippets = tracker.flush();
+      if (snippets.length > 0) {
+        await appendChangeSnippets(doc.id, containerId, snippets);
+      }
+
       // Immediately update local state so content is fresh
       setContent(editContent);
+      tracker.init(editContent);
       setIsEditing(false);
       // Tell parent to refresh the document list
       onSuccess();
@@ -523,7 +536,12 @@ export default function ViewDocumentModal({
                     "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                 }}
                 value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const pos = e.target.selectionStart ?? val.length;
+                  setEditContent(val);
+                  tracker.onEdit(val, pos);
+                }}
                 disabled={isSaving}
               />
             ) : isMarkdown ? (

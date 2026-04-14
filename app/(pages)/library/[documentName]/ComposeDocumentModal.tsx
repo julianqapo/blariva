@@ -6,6 +6,8 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { X, PenLine, Loader2, Bold, Italic, List, Heading2, Heading3, ListOrdered, Minus, AlertCircle, CheckCircle2 } from "lucide-react";
 import { createBrowserSupabaseClient } from "../../../utils/supabase_browser";
+import { useChangeTracker } from "./useChangeTracker";
+import { appendChangeSnippets } from "./document_actions";
 
 type Props = {
   open: boolean;
@@ -151,6 +153,9 @@ export default function ComposeDocumentModal({ open, onClose, onSuccess, contain
 
   const isEditMode = !!editDocument;
 
+  // Change tracker for Wiki LLM — captures context around edits
+  const tracker = useChangeTracker();
+
   // Force re-render on every editor transaction (selection change, content change)
   // so toolbar active states update immediately when clicking/selecting styled text
   const [, setEditorState] = useState(0);
@@ -169,10 +174,18 @@ export default function ComposeDocumentModal({ open, onClose, onSuccess, contain
         class: "tiptap-editor",
       },
     },
-    onUpdate: ({ editor }) => {
-      const text = editor.getText();
+    onUpdate: ({ editor: e }) => {
+      const text = e.getText();
       setCharCount(text.length);
       setWordCount(text.trim() ? text.trim().split(/\s+/).length : 0);
+
+      // Track changes in edit mode for Wiki LLM
+      if (isEditMode) {
+        const cursorPos = e.state.selection.from;
+        // TipTap positions include node offsets, convert to text offset
+        const textBefore = e.state.doc.textBetween(0, cursorPos, " ");
+        tracker.onEdit(text, textBefore.length);
+      }
     },
     // Re-render toolbar on every transaction (cursor move, selection, format change)
     onTransaction: () => {
@@ -194,6 +207,7 @@ export default function ComposeDocumentModal({ open, onClose, onSuccess, contain
         const text = editor.getText();
         setCharCount(text.length);
         setWordCount(text.trim() ? text.trim().split(/\s+/).length : 0);
+        tracker.init(text);
       } else {
         // Create mode: clear everything
         setTitle("");
@@ -282,6 +296,14 @@ export default function ComposeDocumentModal({ open, onClose, onSuccess, contain
         setError(data.message || "Failed to save document.");
         setLoading(false);
         return;
+      }
+
+      // Flush change snippets in edit mode
+      if (isEditMode && editDocument) {
+        const snippets = tracker.flush();
+        if (snippets.length > 0) {
+          await appendChangeSnippets(editDocument.id, containerId, snippets);
+        }
       }
 
       onSuccess();

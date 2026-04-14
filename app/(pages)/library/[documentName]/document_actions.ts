@@ -212,3 +212,119 @@ export async function renameDocument(documentId: string, newName: string) {
     data: data?.data ?? null,
   };
 }
+
+/**
+ * Appends change snippets to a file in storage at:
+ *   update/{company_id}/{container_id}/{document_id}
+ * and sets document.id_file_status = 1 (pending) so the
+ * LLM processing pipeline knows there are unprocessed changes.
+ *
+ * If the file doesn't exist yet, it is created.
+ * If it already exists, the new snippets are appended.
+ */
+export async function appendChangeSnippets(
+  documentId: string,
+  containerId: string,
+  snippets: Array<{
+    timestamp: string;
+    before: string;
+    changed: string;
+    after: string;
+  }>
+) {
+  if (!snippets.length) {
+    return { success: true, message: "No changes to save" };
+  }
+
+  const supabase = createServerSupabaseClient();
+
+  // Get user's company
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, message: "Not authenticated" };
+  }
+
+  const { data: staff, error: staffErr } = await supabase
+    .from("staff")
+    .select("id_company")
+    .eq("id", user.id)
+    .single();
+
+  if (staffErr || !staff) {
+    return { success: false, message: "Staff record not found" };
+  }
+
+  const companyId = staff.id_company;
+  const storagePath = `update/${companyId}/${containerId}/${documentId}`;
+
+  // Format the new snippets as delimited text blocks
+  const newContent = snippets
+    .map((s) => {
+      const lines: string[] = [];
+      lines.push(`--- CHANGE ${s.timestamp} ---`);
+      lines.push(`BEFORE: ${s.before}`);
+      lines.push(`CHANGED: ${s.changed}`);
+      lines.push(`AFTER: ${s.after}`);
+      lines.push("");
+      return lines.join("\n");
+    })
+    .join("\n");
+
+  // Try to download the existing file first to append
+  let existingContent = "";
+  const { data: urlData } = await supabase.storage
+    .from("document")
+    .createSignedUrl(storagePath, 60);
+
+  if (urlData?.signedUrl) {
+    try {
+      const res = await fetch(`${urlData.signedUrl}&t=${Date.now()}`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        existingContent = await res.text();
+      }
+    } catch {
+      // File doesn't exist yet — that's fine
+    }
+  }
+
+  const fullContent = existingContent
+    ? `${existingContent}\n${newContent}`
+    : newContent;
+
+  // Upload (upsert) the combined content
+  const blob = new Blob([fullContent], { type: "text/plain" });
+  const { error: uploadErr } = await supabase.storage
+    .from("document")
+    .upload(storagePath, blob, {
+      contentType: "text/plain",
+      upsert: true,
+    });
+
+  if (uploadErr) {
+    return {
+      success: false,
+      message: `Failed to save change log: ${uploadErr.message}`,
+    };
+  }
+
+  // Set document status to 1 (pending) so the LLM pipeline picks it up
+  const { error: statusErr } = await supabase
+    .from("document")
+    .update({ id_file_status: 1 })
+    .eq("id", documentId)
+    .eq("id_company", companyId);
+
+  if (statusErr) {
+    return {
+      success: false,
+      message: `Change log saved, but failed to update status: ${statusErr.message}`,
+    };
+  }
+
+  return { success: true, message: "Change log saved" };
+}
