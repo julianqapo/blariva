@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, Upload, PenLine, Search, FileText, FolderOpen, Loader2, File as FileIcon, Image as ImageIcon } from "lucide-react";
+import {
+  Plus, Upload, PenLine, Search, FileText, FolderOpen,
+  Loader2, File as FileIcon, Image as ImageIcon,
+  ArrowUp, ArrowDown,
+} from "lucide-react";
 import ComposeDocumentModal from "./ComposeDocumentModal";
 import UploadFilesModal from "./UploadFilesModal";
 import ViewDocumentModal from "./ViewDocumentModal";
@@ -15,7 +19,11 @@ type Document = {
   file_size: number;
   id_file_status: number | null;
   created_at: string;
+  updated_at: string;
 };
+
+type SortKey = "name" | "file_size" | "created_at" | "updated_at" | "status";
+type SortDir = "asc" | "desc";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -23,23 +31,38 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatLocalTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function getStatusLabel(status: number | null) {
   switch (status) {
-    case 1: return { label: "Pending", color: "var(--muted)" };
-    case 2: return { label: "Processing", color: "var(--primary)" };
-    case 3: return { label: "Ready", color: "#22c55e" };
-    default: return { label: "Unknown", color: "var(--muted)" };
+    case 1: return { label: "Pending", color: "var(--muted)", bg: "rgba(148,163,184,0.1)" };
+    case 2: return { label: "Processing", color: "var(--primary)", bg: "rgba(245,158,11,0.1)" };
+    case 3: return { label: "Ready", color: "#22c55e", bg: "rgba(34,197,94,0.1)" };
+    default: return { label: "Unknown", color: "var(--muted)", bg: "rgba(148,163,184,0.1)" };
   }
+}
+
+function getStatusSortValue(status: number | null): number {
+  return status ?? 0;
 }
 
 function getDocIcon(name: string) {
   const ext = name.split(".").pop()?.toLowerCase();
-  if (ext === "pdf") return <FileText size={16} className="text-red-400" />;
-  if (ext === "doc" || ext === "docx") return <FileText size={16} className="text-blue-500" />;
-  if (ext === "txt") return <FileText size={16} className="text-gray-400" />;
-  if (ext === "md" || ext === "markdown") return <FileText size={16} className="text-purple-400" />;
-  if (["png", "jpg", "jpeg"].includes(ext || "")) return <ImageIcon size={16} className="text-blue-400" />;
-  return <FileIcon size={16} style={{ color: "var(--muted)" }} />;
+  if (ext === "pdf") return <FileText size={15} className="text-red-400" />;
+  if (ext === "doc" || ext === "docx") return <FileText size={15} className="text-blue-500" />;
+  if (ext === "txt") return <FileText size={15} className="text-gray-400" />;
+  if (ext === "md" || ext === "markdown") return <FileText size={15} className="text-purple-400" />;
+  if (["png", "jpg", "jpeg"].includes(ext || "")) return <ImageIcon size={15} className="text-blue-400" />;
+  return <FileIcon size={15} style={{ color: "var(--muted)" }} />;
 }
 
 function isViewable(name: string): boolean {
@@ -47,6 +70,55 @@ function isViewable(name: string): boolean {
   return ["md", "markdown", "txt", "pdf", "png", "jpg", "jpeg", "doc", "docx"].includes(ext);
 }
 
+/* ─────────────── Sort Header Component ─────────────── */
+function SortHeader({
+  label,
+  sortKey,
+  currentKey,
+  currentDir,
+  onClick,
+  align = "left",
+}: {
+  label: string;
+  sortKey: SortKey;
+  currentKey: SortKey;
+  currentDir: SortDir;
+  onClick: (key: SortKey) => void;
+  align?: "left" | "center" | "right";
+}) {
+  const isActive = currentKey === sortKey;
+  const alignClass = align === "center" ? "justify-center" : align === "right" ? "justify-end" : "justify-start";
+
+  return (
+    <button
+      onClick={() => onClick(sortKey)}
+      className={`flex items-center gap-1 ${alignClass} group transition-colors duration-150`}
+      style={{ color: isActive ? "var(--primary)" : "var(--muted)" }}
+    >
+      <span className="text-xs font-semibold uppercase tracking-wider">{label}</span>
+      <span className="flex flex-col -space-y-1">
+        <ArrowUp
+          size={11}
+          strokeWidth={2.5}
+          className="transition-colors duration-150"
+          style={{
+            color: isActive && currentDir === "asc" ? "var(--primary)" : "var(--border)",
+          }}
+        />
+        <ArrowDown
+          size={11}
+          strokeWidth={2.5}
+          className="transition-colors duration-150"
+          style={{
+            color: isActive && currentDir === "desc" ? "var(--primary)" : "var(--border)",
+          }}
+        />
+      </span>
+    </button>
+  );
+}
+
+/* ─────────────── Main Page ─────────────── */
 export default function ContainerDetail({ params }: { params: Promise<{ documentName: string }> }) {
   const resolvedParams = use(params);
   const containerName = decodeURIComponent(resolvedParams.documentName);
@@ -60,10 +132,9 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
   // View document modal
   const [viewDoc, setViewDoc] = useState<Document | null>(null);
   const [isViewOpen, setIsViewOpen] = useState(false);
-  // Incremented after any save to force ViewDocumentModal to re-fetch content
   const [viewRefreshKey, setViewRefreshKey] = useState(0);
 
-  // Edit document (when opening ComposeDocumentModal in edit mode from ViewDocumentModal)
+  // Edit document
   const [editDocData, setEditDocData] = useState<{
     id: string;
     name: string;
@@ -74,6 +145,10 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Sort state
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   useEffect(() => {
     if (containerId) {
@@ -99,7 +174,6 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
     setIsLoading(false);
   }
 
-  /** Called after any save — refreshes the doc list AND bumps the view key */
   function handleDocumentSaved() {
     loadDocuments();
     setViewRefreshKey((k) => k + 1);
@@ -122,9 +196,43 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
     setEditDocData(null);
   }
 
-  const filteredDocs = documents.filter((d) =>
-    d.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  // Filter + sort
+  const sortedDocs = useMemo(() => {
+    const filtered = documents.filter((d) =>
+      d.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "name":
+          cmp = a.name.localeCompare(b.name);
+          break;
+        case "file_size":
+          cmp = a.file_size - b.file_size;
+          break;
+        case "created_at":
+          cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          break;
+        case "updated_at":
+          cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+          break;
+        case "status":
+          cmp = getStatusSortValue(a.id_file_status) - getStatusSortValue(b.id_file_status);
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [documents, searchQuery, sortKey, sortDir]);
 
   return (
     <div className="p-6 lg:p-8 h-full flex flex-col">
@@ -171,7 +279,6 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
             </span>
 
             <div className="relative group z-40">
-              {/* Trigger button */}
               <button
                 className="w-9 h-9 flex items-center justify-center rounded-xl shadow-md transition-transform duration-200 active:scale-95"
                 style={{
@@ -187,7 +294,6 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
                 />
               </button>
 
-              {/* Dropdown */}
               <div
                 className="absolute top-0 right-0 w-44 rounded-xl overflow-hidden shadow-xl
                   transition-all duration-300 ease-in-out
@@ -199,11 +305,8 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
                   border: "1px solid var(--border)",
                 }}
               >
-                {/* Spacer behind the button */}
                 <div className="h-9 w-full" />
-
                 <div className="p-1.5 space-y-0.5">
-                  {/* Upload */}
                   <button
                     onClick={() => setIsUploadOpen(true)}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg
@@ -224,7 +327,6 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
 
                   <div className="h-px mx-2" style={{ background: "var(--border)" }} />
 
-                  {/* Write */}
                   <button
                     onClick={() => { setEditDocData(null); setIsComposeOpen(true); }}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg
@@ -249,7 +351,7 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
         </div>
       </div>
 
-      {/* Loading state */}
+      {/* Loading / Error / Empty / Table */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center flex-1">
           <Loader2 size={32} className="animate-spin mb-4 text-amber-500" />
@@ -261,7 +363,7 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
         <div className="flex flex-col items-center justify-center flex-1">
           <p className="font-semibold text-sm text-red-400">{error}</p>
         </div>
-      ) : filteredDocs.length === 0 ? (
+      ) : sortedDocs.length === 0 && documents.length === 0 ? (
         /* Empty state */
         <div
           className="flex flex-col items-center justify-center flex-1 rounded-2xl border-2 border-dashed min-h-0"
@@ -275,110 +377,146 @@ export default function ContainerDetail({ params }: { params: Promise<{ document
           </div>
 
           <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>
-            {searchQuery ? "No matching documents" : "No documents yet"}
+            No documents yet
           </p>
           <p className="text-xs mt-1 mb-5" style={{ color: "var(--muted)" }}>
-            {searchQuery
-              ? "Try a different search term"
-              : "Upload a file or write a document to get started"}
+            Upload a file or write a document to get started
           </p>
 
-          {!searchQuery && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsUploadOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-200 active:scale-95"
-                style={{
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--primary)";
-                  e.currentTarget.style.color = "var(--primary)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border)";
-                  e.currentTarget.style.color = "var(--text)";
-                }}
-              >
-                <Upload size={13} />
-                Upload
-              </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsUploadOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-200 active:scale-95"
+              style={{
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                color: "var(--text)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "var(--primary)";
+                e.currentTarget.style.color = "var(--primary)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "var(--border)";
+                e.currentTarget.style.color = "var(--text)";
+              }}
+            >
+              <Upload size={13} />
+              Upload
+            </button>
 
-              <button
-                onClick={() => { setEditDocData(null); setIsComposeOpen(true); }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95"
-                style={{
-                  background: "var(--primary)",
-                  color: "var(--primary-text)",
-                }}
-              >
-                <PenLine size={13} />
-                Write Directly
-              </button>
-            </div>
-          )}
+            <button
+              onClick={() => { setEditDocData(null); setIsComposeOpen(true); }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95"
+              style={{
+                background: "var(--primary)",
+                color: "var(--primary-text)",
+              }}
+            >
+              <PenLine size={13} />
+              Write Directly
+            </button>
+          </div>
         </div>
       ) : (
-        /* Document list */
-        <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
-          {filteredDocs.map((doc) => {
-            const status = getStatusLabel(doc.id_file_status);
-            const viewable = isViewable(doc.name);
-            return (
-              <div
-                key={doc.id}
-                onClick={() => handleDocumentClick(doc)}
-                className={`flex items-center gap-4 px-4 py-3 rounded-xl transition-colors ${
-                  viewable ? "cursor-pointer" : ""
-                }`}
-                style={{
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                }}
-                onMouseEnter={(e) => {
-                  if (viewable) {
-                    e.currentTarget.style.borderColor = "var(--primary)";
-                    e.currentTarget.style.background = "rgba(245,158,11,0.03)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border)";
-                  e.currentTarget.style.background = "var(--surface)";
-                }}
-              >
-                <div className="shrink-0">{getDocIcon(doc.name)}</div>
-                <div className="flex-1 min-w-0">
-                  <p
-                    className="text-sm font-semibold truncate"
-                    style={{ color: "var(--text)" }}
-                  >
-                    {doc.name}
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-                    {formatFileSize(doc.file_size)}
-                  </p>
-                </div>
-                <div className="shrink-0 flex items-center gap-2">
-                  <span
-                    className="text-xs font-semibold px-2 py-0.5 rounded-md"
-                    style={{
-                      color: status.color,
-                      background:
-                        status.color === "#22c55e"
-                          ? "rgba(34,197,94,0.1)"
-                          : status.color === "var(--primary)"
-                          ? "rgba(245,158,11,0.1)"
-                          : "rgba(148,163,184,0.1)",
-                    }}
-                  >
-                    {status.label}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+        /* ─────────────── Documents Table ─────────────── */
+        <div
+          className="flex-1 overflow-auto min-h-0 rounded-xl"
+          style={{ border: "1px solid var(--border)" }}
+        >
+          <table className="w-full border-collapse" style={{ minWidth: "640px" }}>
+            <thead>
+              <tr style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>
+                <th className="text-left px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+                  <SortHeader label="Name" sortKey="name" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
+                </th>
+                <th className="text-left px-4 py-3" style={{ borderBottom: "1px solid var(--border)", width: "100px" }}>
+                  <SortHeader label="Size" sortKey="file_size" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
+                </th>
+                <th className="text-left px-4 py-3" style={{ borderBottom: "1px solid var(--border)", width: "180px" }}>
+                  <SortHeader label="Created" sortKey="created_at" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
+                </th>
+                <th className="text-left px-4 py-3" style={{ borderBottom: "1px solid var(--border)", width: "180px" }}>
+                  <SortHeader label="Updated" sortKey="updated_at" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} />
+                </th>
+                <th className="text-center px-4 py-3" style={{ borderBottom: "1px solid var(--border)", width: "110px" }}>
+                  <SortHeader label="Status" sortKey="status" currentKey={sortKey} currentDir={sortDir} onClick={handleSort} align="center" />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedDocs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="text-center py-12">
+                    <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
+                      No matching documents
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                sortedDocs.map((doc, idx) => {
+                  const status = getStatusLabel(doc.id_file_status);
+                  const viewable = isViewable(doc.name);
+                  return (
+                    <tr
+                      key={doc.id}
+                      onClick={() => handleDocumentClick(doc)}
+                      className={`transition-colors duration-150 ${viewable ? "cursor-pointer" : ""}`}
+                      style={{
+                        borderBottom: idx < sortedDocs.length - 1 ? "1px solid var(--border)" : "none",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (viewable) {
+                          e.currentTarget.style.background = "rgba(245,158,11,0.04)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                      }}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="shrink-0">{getDocIcon(doc.name)}</span>
+                          <span
+                            className="text-sm font-semibold truncate"
+                            style={{ color: "var(--text)" }}
+                          >
+                            {doc.name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs" style={{ color: "var(--muted)" }}>
+                          {formatFileSize(doc.file_size)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs" style={{ color: "var(--muted)" }}>
+                          {formatLocalTime(doc.created_at)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs" style={{ color: "var(--muted)" }}>
+                          {formatLocalTime(doc.updated_at)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className="inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                          style={{
+                            color: status.color,
+                            background: status.bg,
+                          }}
+                        >
+                          {status.label}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 

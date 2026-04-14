@@ -2,16 +2,15 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { BookOpen, Plus, Search, MoreVertical, FolderOpen, AlignLeft, Loader2 } from "lucide-react";
+import { Plus, Search, FolderOpen, Loader2, FileText, ChevronRight } from "lucide-react";
 import CreateContainerModal from "./CreateContainerModal";
-
-// The parent ONLY needs to fetch data now
 import { fetchContainers } from "./container_actions";
 
 type Container = {
   id: string;
   name: string;
   description: string;
+  counter: number;
 };
 
 export default function KnowledgeLibraryPage() {
@@ -28,7 +27,7 @@ export default function KnowledgeLibraryPage() {
   async function loadContainers() {
     setIsLoading(true);
     const response = await fetchContainers();
-    
+
     if (response.success) {
       setContainers(response.data);
     } else {
@@ -44,28 +43,28 @@ export default function KnowledgeLibraryPage() {
   return (
     <>
       <div className="page-body animate-fade-in-up">
-        <div className="flex items-start justify-between mb-8">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <div className="relative flex-1 max-w-sm">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted)" }} />
-              <input
-                type="text"
-                placeholder="Search containers…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="auth-input"
-                style={{ padding: "0.6rem 1rem 0.6rem 2.25rem" }}
-              />
-            </div>
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <div className="relative flex-1 max-w-sm">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted)" }} />
+            <input
+              type="text"
+              placeholder="Search containers…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="auth-input"
+              style={{ padding: "0.6rem 1rem 0.6rem 2.25rem" }}
+            />
+          </div>
+
+          <div className="flex items-center gap-4">
             <span className="text-sm font-medium" style={{ color: "var(--muted)" }}>
               {filtered.length} container{filtered.length !== 1 ? "s" : ""}
             </span>
+            <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
+              <Plus size={16} />
+              New Container
+            </button>
           </div>
-         
-          <button onClick={() => setModalOpen(true)} className="btn-primary flex items-center gap-2">
-            <Plus size={16} />
-            New Container
-          </button>
         </div>
 
         {error && (
@@ -75,10 +74,10 @@ export default function KnowledgeLibraryPage() {
         )}
 
         {isLoading ? (
-           <div className="flex flex-col items-center justify-center py-24">
-             <Loader2 size={32} className="animate-spin mb-4 text-amber-500" />
-             <p className="font-semibold text-base" style={{ color: "var(--muted)" }}>Loading workspace...</p>
-           </div>
+          <div className="flex flex-col items-center justify-center py-24">
+            <Loader2 size={32} className="animate-spin mb-4 text-amber-500" />
+            <p className="font-semibold text-base" style={{ color: "var(--muted)" }}>Loading workspace...</p>
+          </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24">
             <FolderOpen size={48} className="mb-4" style={{ color: "var(--border)" }} />
@@ -88,9 +87,29 @@ export default function KnowledgeLibraryPage() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
-            {filtered.map((col) => (
-              <ContainerCard key={col.id} container={col} />
+          <div
+            className="rounded-xl overflow-hidden"
+            style={{ border: "1px solid var(--border)" }}
+          >
+            {/* Table header */}
+            <div
+              className="grid items-center px-5 py-3 text-xs font-semibold uppercase tracking-wider"
+              style={{
+                gridTemplateColumns: "1fr 2fr auto auto",
+                color: "var(--muted)",
+                background: "var(--surface)",
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
+              <span>Name</span>
+              <span>Description</span>
+              <span className="text-center" style={{ minWidth: "80px" }}>Documents</span>
+              <span style={{ width: "32px" }} />
+            </div>
+
+            {/* Rows */}
+            {filtered.map((col, idx) => (
+              <ContainerRow key={col.id} container={col} isLast={idx === filtered.length - 1} />
             ))}
           </div>
         )}
@@ -99,7 +118,6 @@ export default function KnowledgeLibraryPage() {
       <CreateContainerModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        // 5. When the modal succeeds, close it and fetch the fresh data!
         onSuccess={() => {
           setModalOpen(false);
           loadContainers();
@@ -110,44 +128,74 @@ export default function KnowledgeLibraryPage() {
 }
 
 
-function ContainerCard({ container }: { container: Container }) {
+function ContainerRow({ container, isLast }: { container: Container; isLast: boolean }) {
+  const [hovered, setHovered] = useState(false);
+
   return (
-    <Link 
+    <Link
       href={`/library/${encodeURIComponent(container.name)}?id=${container.id}`}
-      className="feature-card group relative cursor-pointer block transition-transform hover:-translate-y-1" 
-      style={{ padding: "1.5rem" }}
+      className="grid items-center px-5 py-4 transition-colors duration-200"
+      style={{
+        gridTemplateColumns: "1fr 2fr auto auto",
+        background: hovered ? "rgba(245,158,11,0.04)" : "transparent",
+        borderBottom: isLast ? "none" : "1px solid var(--border)",
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <div className="flex items-start justify-between mb-4">
-        <div className="icon-wrap" style={{ width: 40, height: 40, borderRadius: 10 }}>
-          <BookOpen size={18} className="text-amber-500" />
-        </div>
-        
-        <button
-          onClick={(e) => {
-            // This stops the link from firing when they just want to open the menu!
-            e.preventDefault(); 
-            e.stopPropagation();
-            // TODO: Trigger your ManageContainerModal open state here
+      {/* Name */}
+      <div className="flex items-center gap-3 min-w-0 pr-4">
+        <div
+          className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-200"
+          style={{
+            background: hovered ? "rgba(245,158,11,0.12)" : "var(--surface)",
+            border: `1px solid ${hovered ? "rgba(245,158,11,0.25)" : "var(--border)"}`,
           }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-amber-500/10"
-          style={{ color: "var(--muted)" }}
-          aria-label="More options"
         >
-          <MoreVertical size={15} />
-        </button>
+          <FolderOpen size={14} className={hovered ? "text-amber-500" : ""} style={hovered ? {} : { color: "var(--muted)" }} />
+        </div>
+        <span
+          className="font-semibold text-sm truncate transition-colors duration-200"
+          style={{ color: hovered ? "var(--primary)" : "var(--text)" }}
+        >
+          {container.name}
+        </span>
       </div>
 
-      <h3 className="font-display font-bold text-base mb-2 leading-snug truncate">
-        {container.name}
-      </h3>
+      {/* Description — expands to fit */}
+      <p
+        className="text-sm leading-relaxed pr-4"
+        style={{ color: "var(--muted)" }}
+      >
+        {container.description || "No description"}
+      </p>
 
-      <div className="border-t mb-3" style={{ borderColor: "var(--border)" }} />
+      {/* Counter badge */}
+      <div className="flex items-center justify-center" style={{ minWidth: "80px" }}>
+        <div
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-colors duration-200"
+          style={{
+            background: container.counter > 0
+              ? (hovered ? "rgba(245,158,11,0.12)" : "rgba(245,158,11,0.08)")
+              : "rgba(148,163,184,0.08)",
+            color: container.counter > 0 ? "var(--primary)" : "var(--muted)",
+          }}
+        >
+          <FileText size={11} />
+          {container.counter}
+        </div>
+      </div>
 
-      <div className="flex items-start gap-2">
-        <AlignLeft size={13} className="shrink-0 mt-0.5" style={{ color: "var(--muted)" }} />
-        <p className="text-xs line-clamp-2 leading-relaxed" style={{ color: "var(--muted)" }}>
-          {container.description || "No description provided."}
-        </p>
+      {/* Arrow */}
+      <div className="flex items-center justify-center" style={{ width: "32px" }}>
+        <ChevronRight
+          size={16}
+          className="transition-all duration-200"
+          style={{
+            color: hovered ? "var(--primary)" : "var(--muted)",
+            transform: hovered ? "translateX(2px)" : "translateX(0)",
+          }}
+        />
       </div>
     </Link>
   );

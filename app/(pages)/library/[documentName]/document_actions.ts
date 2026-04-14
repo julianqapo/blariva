@@ -49,7 +49,7 @@ export async function fetchDocumentsByContainer(containerId: string) {
 
   const { data, error } = await supabase
     .from("document")
-    .select("id, name, path, file_size, id_file_status, created_at")
+    .select("id, name, path, file_size, id_file_status, created_at, updated_at")
     .eq("id_container", containerId)
     .order("created_at", { ascending: false });
 
