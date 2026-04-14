@@ -72,6 +72,7 @@ export async function fetchDocumentsByContainer(containerId: string) {
  * Downloads a file and returns it as a base64 string.
  * Works for ALL file types (PDF, Word, images, etc).
  * Verifies auth + company match before returning data.
+ * Uses a signed URL with cache-busting to always get the latest version.
  */
 export async function getFileBase64(path: string) {
   const supabase = createServerSupabaseClient();
@@ -81,22 +82,32 @@ export async function getFileBase64(path: string) {
     return { success: false, base64: "", contentType: "", message: access.message };
   }
 
-  const { data, error } = await supabase.storage
+  // Use signed URL + cache-bust to bypass CDN/storage cache
+  const { data: urlData, error: urlError } = await supabase.storage
     .from("document")
-    .download(path);
+    .createSignedUrl(path, 60); // 1 minute is enough for a download
 
-  if (error || !data) {
-    return { success: false, base64: "", contentType: "", message: error?.message || "Failed to download file" };
+  if (urlError || !urlData?.signedUrl) {
+    return { success: false, base64: "", contentType: "", message: urlError?.message || "Failed to create download URL" };
   }
 
-  const buffer = await data.arrayBuffer();
+  const cacheBustUrl = `${urlData.signedUrl}&t=${Date.now()}`;
+  const res = await fetch(cacheBustUrl, { cache: "no-store" });
+
+  if (!res.ok) {
+    return { success: false, base64: "", contentType: "", message: "Failed to download file" };
+  }
+
+  const buffer = await res.arrayBuffer();
   const base64 = Buffer.from(buffer).toString("base64");
-  return { success: true, base64, contentType: data.type || "", message: "OK" };
+  const contentType = res.headers.get("content-type") || "";
+  return { success: true, base64, contentType, message: "OK" };
 }
 
 /**
  * Downloads a text-based file and returns its content as a string.
  * Verifies auth + company match before returning data.
+ * Uses a signed URL with cache-busting to always get the latest version.
  */
 export async function getTextFileContent(path: string) {
   const supabase = createServerSupabaseClient();
@@ -106,15 +117,23 @@ export async function getTextFileContent(path: string) {
     return { success: false, content: "", message: access.message };
   }
 
-  const { data, error } = await supabase.storage
+  // Use signed URL + cache-bust to bypass CDN/storage cache
+  const { data: urlData, error: urlError } = await supabase.storage
     .from("document")
-    .download(path);
+    .createSignedUrl(path, 60);
 
-  if (error || !data) {
-    return { success: false, content: "", message: error?.message || "Failed to download file" };
+  if (urlError || !urlData?.signedUrl) {
+    return { success: false, content: "", message: urlError?.message || "Failed to create download URL" };
   }
 
-  const text = await data.text();
+  const cacheBustUrl = `${urlData.signedUrl}&t=${Date.now()}`;
+  const res = await fetch(cacheBustUrl, { cache: "no-store" });
+
+  if (!res.ok) {
+    return { success: false, content: "", message: "Failed to download file" };
+  }
+
+  const text = await res.text();
   return { success: true, content: text, message: "OK" };
 }
 
