@@ -1,19 +1,88 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Upload, PenLine, Search, File, FileText, FolderOpen } from "lucide-react";
+import { useState, useEffect, use } from "react";
+import { Plus, Upload, PenLine, Search, FileText, FolderOpen, Loader2, File as FileIcon, Image as ImageIcon } from "lucide-react";
 import ComposeDocumentModal from "./ComposeDocumentModal";
+import UploadFilesModal from "./UploadFilesModal";
+import { fetchContainerByName, fetchDocumentsByContainer } from "./document_actions";
 
-export default function ContainerDetail({ params }: { params: { name: string } }) {
-  const containerName = decodeURIComponent(params.name);
+type Document = {
+  id: string;
+  name: string;
+  path: string;
+  file_size: number;
+  id_file_status: number | null;
+  created_at: string;
+};
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getStatusLabel(status: number | null) {
+  switch (status) {
+    case 1: return { label: "Pending", color: "var(--muted)" };
+    case 2: return { label: "Processing", color: "var(--primary)" };
+    case 3: return { label: "Ready", color: "#22c55e" };
+    default: return { label: "Unknown", color: "var(--muted)" };
+  }
+}
+
+function getDocIcon(name: string) {
+  const ext = name.split(".").pop()?.toLowerCase();
+  if (ext === "pdf") return <FileText size={16} className="text-red-400" />;
+  if (ext === "doc" || ext === "docx") return <FileText size={16} className="text-blue-500" />;
+  if (ext === "txt") return <FileText size={16} className="text-gray-400" />;
+  if (["png", "jpg", "jpeg"].includes(ext || "")) return <ImageIcon size={16} className="text-blue-400" />;
+  return <FileIcon size={16} style={{ color: "var(--muted)" }} />;
+}
+
+export default function ContainerDetail({ params }: { params: Promise<{ documentName: string }> }) {
+  const resolvedParams = use(params);
+  const containerName = decodeURIComponent(resolvedParams.documentName);
+
   const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [containerId, setContainerId] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    loadContainerAndDocuments();
+  }, [containerName]);
+
+  async function loadContainerAndDocuments() {
+    setIsLoading(true);
+    setError("");
+
+    const containerRes = await fetchContainerByName(containerName);
+    if (!containerRes.success || !containerRes.data) {
+      setError(containerRes.message);
+      setIsLoading(false);
+      return;
+    }
+
+    setContainerId(containerRes.data.id);
+
+    const docsRes = await fetchDocumentsByContainer(containerRes.data.id);
+    if (docsRes.success) {
+      setDocuments(docsRes.data);
+    }
+
+    setIsLoading(false);
+  }
+
+  const filteredDocs = documents.filter((d) =>
+    d.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="p-6 lg:p-8 h-full flex flex-col">
-
-    
-
       {/* Toolbar row */}
       <div
         className="flex items-center justify-between gap-4 p-3 rounded-2xl mb-6"
@@ -41,7 +110,7 @@ export default function ContainerDetail({ params }: { params: { name: string } }
           <div className="hidden sm:flex items-center gap-1.5">
             <FileText size={13} style={{ color: "var(--muted)" }} />
             <span className="text-xs font-semibold" style={{ color: "var(--muted)" }}>
-              0 Documents
+              {documents.length} Document{documents.length !== 1 ? "s" : ""}
             </span>
           </div>
 
@@ -90,9 +159,10 @@ export default function ContainerDetail({ params }: { params: { name: string } }
 
                 <div className="p-1.5 space-y-0.5">
                   {/* Upload */}
-                  <label
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer
-                      text-sm font-medium transition-colors duration-150 whitespace-nowrap"
+                  <button
+                    onClick={() => setIsUploadOpen(true)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg
+                      text-sm font-medium transition-colors duration-150 whitespace-nowrap text-left"
                     style={{ color: "var(--text)" }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = "rgba(245,158,11,0.08)";
@@ -105,13 +175,7 @@ export default function ContainerDetail({ params }: { params: { name: string } }
                   >
                     <Upload size={14} />
                     <span>Upload Files</span>
-                    <input
-                      type="file"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => console.log(e.target.files)}
-                    />
-                  </label>
+                  </button>
 
                   <div className="h-px mx-2" style={{ background: "var(--border)" }} />
 
@@ -140,66 +204,139 @@ export default function ContainerDetail({ params }: { params: { name: string } }
         </div>
       </div>
 
-      {/* Empty state */}
-      <div
-  className="flex flex-col items-center justify-center flex-1 rounded-2xl border-2 border-dashed min-h-0"
-  style={{ borderColor: "var(--border)" }}
->
+      {/* Loading state */}
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center flex-1">
+          <Loader2 size={32} className="animate-spin mb-4 text-amber-500" />
+          <p className="font-semibold text-sm" style={{ color: "var(--muted)" }}>
+            Loading documents...
+          </p>
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center flex-1">
+          <p className="font-semibold text-sm text-red-400">{error}</p>
+        </div>
+      ) : filteredDocs.length === 0 ? (
+        /* Empty state */
         <div
-          className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+          className="flex flex-col items-center justify-center flex-1 rounded-2xl border-2 border-dashed min-h-0"
+          style={{ borderColor: "var(--border)" }}
         >
-          <FolderOpen size={26} style={{ color: "var(--muted)" }} />
-        </div>
-
-        <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>
-          No documents yet
-        </p>
-        <p className="text-xs mt-1 mb-5" style={{ color: "var(--muted)" }}>
-          Upload a file or write a document to get started
-        </p>
-
-        {/* Quick action buttons in empty state */}
-        <div className="flex items-center gap-2">
-          <label
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-200 active:scale-95"
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              color: "var(--text)",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "var(--primary)";
-              e.currentTarget.style.color = "var(--primary)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "var(--border)";
-              e.currentTarget.style.color = "var(--text)";
-            }}
+          <div
+            className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
           >
-            <Upload size={13} />
-            Upload
-            <input type="file" multiple className="hidden" onChange={(e) => console.log(e.target.files)} />
-          </label>
+            <FolderOpen size={26} style={{ color: "var(--muted)" }} />
+          </div>
 
-          <button
-            onClick={() => setIsComposeOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95"
-            style={{
-              background: "var(--primary)",
-              color: "var(--primary-text)",
-            }}
-          >
-            <PenLine size={13} />
-            Write Directly
-          </button>
+          <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>
+            {searchQuery ? "No matching documents" : "No documents yet"}
+          </p>
+          <p className="text-xs mt-1 mb-5" style={{ color: "var(--muted)" }}>
+            {searchQuery
+              ? "Try a different search term"
+              : "Upload a file or write a document to get started"}
+          </p>
+
+          {!searchQuery && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsUploadOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-200 active:scale-95"
+                style={{
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "var(--primary)";
+                  e.currentTarget.style.color = "var(--primary)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border)";
+                  e.currentTarget.style.color = "var(--text)";
+                }}
+              >
+                <Upload size={13} />
+                Upload
+              </button>
+
+              <button
+                onClick={() => setIsComposeOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95"
+                style={{
+                  background: "var(--primary)",
+                  color: "var(--primary-text)",
+                }}
+              >
+                <PenLine size={13} />
+                Write Directly
+              </button>
+            </div>
+          )}
         </div>
-      </div>
+      ) : (
+        /* Document list */
+        <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+          {filteredDocs.map((doc) => {
+            const status = getStatusLabel(doc.id_file_status);
+            return (
+              <div
+                key={doc.id}
+                className="flex items-center gap-4 px-4 py-3 rounded-xl transition-colors"
+                style={{
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <div className="shrink-0">{getDocIcon(doc.name)}</div>
+                <div className="flex-1 min-w-0">
+                  <p
+                    className="text-sm font-semibold truncate"
+                    style={{ color: "var(--text)" }}
+                  >
+                    {doc.name}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                    {formatFileSize(doc.file_size)}
+                  </p>
+                </div>
+                <div className="shrink-0 flex items-center gap-2">
+                  <span
+                    className="text-xs font-semibold px-2 py-0.5 rounded-md"
+                    style={{
+                      color: status.color,
+                      background:
+                        status.color === "#22c55e"
+                          ? "rgba(34,197,94,0.1)"
+                          : status.color === "var(--primary)"
+                          ? "rgba(245,158,11,0.1)"
+                          : "rgba(148,163,184,0.1)",
+                    }}
+                  >
+                    {status.label}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
+      {/* Modals */}
       <ComposeDocumentModal
         open={isComposeOpen}
         onClose={() => setIsComposeOpen(false)}
       />
+
+      {containerId && (
+        <UploadFilesModal
+          open={isUploadOpen}
+          onClose={() => setIsUploadOpen(false)}
+          onSuccess={() => loadContainerAndDocuments()}
+          containerId={containerId}
+        />
+      )}
     </div>
   );
 }
