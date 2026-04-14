@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -39,8 +39,8 @@ function htmlToMarkdown(html: string): string {
   });
   md = md.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_, inner) => {
     let i = 0;
-    return inner.replace(/<li[^>]*><p[^>]*>(.*?)<\/p><\/li>/gi, () => `${++i}. $1\n`)
-               .replace(/<li[^>]*>(.*?)<\/li>/gi, () => `${++i}. $1\n`) + "\n";
+    return inner.replace(/<li[^>]*><p[^>]*>(.*?)<\/p><\/li>/gi, (_m: string, content: string) => `${++i}. ${content}\n`)
+               .replace(/<li[^>]*>(.*?)<\/li>/gi, (_m: string, content: string) => `${++i}. ${content}\n`) + "\n";
   });
   // Horizontal rule
   md = md.replace(/<hr\s*\/?>/gi, "\n---\n\n");
@@ -96,6 +96,11 @@ export default function ComposeDocumentModal({ open, onClose, onSuccess, contain
 
   const isEditMode = !!editDocument;
 
+  // Force re-render on every editor transaction (selection change, content change)
+  // so toolbar active states update immediately when clicking/selecting styled text
+  const [, setEditorState] = useState(0);
+  const forceUpdate = useCallback(() => setEditorState((n) => n + 1), []);
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -113,6 +118,10 @@ export default function ComposeDocumentModal({ open, onClose, onSuccess, contain
       const text = editor.getText();
       setCharCount(text.length);
       setWordCount(text.trim() ? text.trim().split(/\s+/).length : 0);
+    },
+    // Re-render toolbar on every transaction (cursor move, selection, format change)
+    onTransaction: () => {
+      forceUpdate();
     },
   });
 
